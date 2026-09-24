@@ -1,0 +1,13 @@
+flowchart LR
+    TELEMETRY["Telemetry Module"] --> WS["WebSocket Gateway"]
+    ALERT["Alert Module"] --> WS
+    WS --> DASHBOARD["Web Dashboard"]
+    WS --> MOBILE["Flutter Mobile App"]
+
+    classDef application fill:#EEEDFE,stroke:#534AB7,color:#3C3489;
+    classDef transport fill:#E1F5EE,stroke:#0F6E56,color:#085041;
+    classDef clients fill:#E6F1FB,stroke:#185FA5,color:#0C447C;
+
+    class TELEMETRY,ALERT application;
+    class WS transport;
+    class DASHBOARD,MOBILE clients;

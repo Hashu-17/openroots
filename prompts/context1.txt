@@ -1,0 +1,194 @@
+===========================================================
+SUPPORTED DEVICE UPLINK TYPES (v1)
+===========================================================
+
++----------------+-------------------------+----------------------------+-----------------------------------------------+---------------------------+
+| Uplink         | Transport               | Typical Devices            | Best For                                      | Spring Entry Point        |
++----------------+-------------------------+----------------------------+-----------------------------------------------+---------------------------+
+| HTTPS (REST)   | HTTP / HTTPS            | ESP32, Raspberry Pi,       | Registration, telemetry, firmware,            | REST Controller           |
+|                |                         | Linux SBCs, Cellular       | configuration, image uploads                  |                           |
++----------------+-------------------------+----------------------------+-----------------------------------------------+---------------------------+
+| MQTT           | MQTT over TCP / TLS     | ESP32, STM32, Raspberry Pi | Continuous telemetry, commands,               | MQTT Listener             |
+|                |                         |                            | device status                                 |                           |
++----------------+-------------------------+----------------------------+-----------------------------------------------+---------------------------+
+| LoRaWAN (v2)   | LoRa → Network Server   | Remote battery sensors     | Long-range telemetry                          | MQTT Listener / REST      |
+|                | → MQTT / HTTP           |                            |                                               | Controller                |
++----------------+-------------------------+----------------------------+-----------------------------------------------+---------------------------+
+
+
+===========================================================
+SPRING BOOT PROJECT STRUCTURE
+===========================================================
+
+src/
+└── main/
+    ├── java/
+    │   └── com/
+    │       └── yourcompany/
+    │           └── iot/
+    │
+    │               ├── IoTApplication.java
+    │
+    │               ├── config/
+    │               │   ├── SecurityConfig.java
+    │               │   ├── MqttConfig.java
+    │               │   ├── WebSocketConfig.java
+    │               │   ├── JacksonConfig.java
+    │               │   └── OpenApiConfig.java
+    │
+    │               ├── common/
+    │               │   ├── constants/
+    │               │   ├── dto/
+    │               │   ├── exception/
+    │               │   ├── mapper/
+    │               │   ├── response/
+    │               │   └── util/
+    │
+    │               ├── security/
+    │               │   ├── JwtAuthenticationFilter.java
+    │               │   ├── JwtTokenProvider.java
+    │               │   ├── DeviceAuthenticationFilter.java
+    │               │   └── SecurityUtils.java
+    │
+    │               ├── auth/
+    │               │   ├── controller/
+    │               │   ├── service/
+    │               │   └── dto/
+    │
+    │               ├── user/
+    │               │   ├── controller/
+    │               │   ├── service/
+    │               │   ├── repository/
+    │               │   ├── entity/
+    │               │   └── dto/
+    │
+    │               ├── device/
+    │               │   ├── controller/
+    │               │   ├── service/
+    │               │   ├── repository/
+    │               │   ├── entity/
+    │               │   ├── dto/
+    │               │   ├── mapper/
+    │               │   └── validator/
+    │
+    │               ├── telemetry/
+    │               │   ├── controller/
+    │               │   ├── service/
+    │               │   ├── repository/
+    │               │   ├── entity/
+    │               │   ├── dto/
+    │               │   ├── mapper/
+    │               │   └── validator/
+    │
+    │               ├── command/
+    │               │   ├── controller/
+    │               │   ├── service/
+    │               │   ├── repository/
+    │               │   ├── entity/
+    │               │   └── dto/
+    │
+    │               ├── alert/
+    │               │   ├── controller/
+    │               │   ├── service/
+    │               │   ├── repository/
+    │               │   └── entity/
+    │
+    │               ├── firmware/
+    │               │   ├── controller/
+    │               │   ├── service/
+    │               │   ├── repository/
+    │               │   └── entity/
+    │
+    │               ├── mqtt/
+    │               │   ├── listener/
+    │               │   ├── publisher/
+    │               │   ├── handler/
+    │               │   └── dto/
+    │
+    │               ├── websocket/
+    │               │   ├── config/
+    │               │   ├── controller/
+    │               │   ├── service/
+    │               │   └── dto/
+    │
+    │               ├── storage/
+    │               │   ├── service/
+    │               │   └── provider/
+    │
+    │               ├── scheduler/
+    │               │   ├── HeartbeatScheduler.java
+    │               │   ├── CleanupScheduler.java
+    │               │   └── AlertScheduler.java
+    │
+    │               └── integration/
+    │                   ├── lorawan/
+    │                   ├── maps/
+    │                   ├── weather/
+    │                   └── email/
+    │
+    └── resources/
+        ├── application.yml
+        ├── application-dev.yml
+        ├── application-prod.yml
+        ├── static/
+        └── templates/
+
+
+===========================================================
+DATA FLOW (UPLINK)
+===========================================================
+
+HTTPS Device
+      │
+      ▼
+REST Controller
+      │
+      ▼
+TelemetryService
+      │
+      ├────────► PostgreSQL
+      │
+      └────────► WebSocket
+
+
+MQTT Device
+      │
+      ▼
+Mosquitto Broker
+      │
+      ▼
+MQTT Listener
+      │
+      ▼
+TelemetryService
+      │
+      ├────────► PostgreSQL
+      │
+      └────────► WebSocket
+
+
+===========================================================
+DEVICE COMMAND FLOW (DOWNLINK)
+===========================================================
+
+Flutter / Web Dashboard
+          │
+          ▼
+REST API
+          │
+          ▼
+CommandService
+          │
+     ┌────┴─────┐
+     │          │
+ MQTT Device  HTTP Device
+     │          │
+     ▼          ▼
+MQTT Publish   Store Pending Command
+     │               │
+     ▼               ▼
+Mosquitto      Device polls
+     │         GET /commands
+     ▼               │
+ESP32 / STM32        ▼
+                Execute Command

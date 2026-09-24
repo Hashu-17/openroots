@@ -1,0 +1,313 @@
+===========================================================
+COMPLETE BACKEND DEVELOPMENT ROADMAP
+(Open-Source Self-Hosted IoT Platform)
+===========================================================
+
+Phase 1 ─ High-Level Architecture ✅
+-----------------------------------
+Goal:
+    Define how data enters, flows through, and leaves the system.
+
+Topics:
+    • Spring Boot
+    • REST Controllers
+    • MQTT Listeners
+    • MQTT Publishers
+    • WebSockets
+    • PostgreSQL
+    • Docker
+    • Package Structure
+    • Overall System Architecture
+
+
+Phase 2 ─ Domain Modeling
+--------------------------
+Goal:
+    Define the "things" that exist in the platform.
+
+Questions:
+    • What is a User?
+    • What is a Project?
+    • What is a Device?
+    • What is a Gateway?
+    • What is Telemetry?
+    • What is a Sensor?
+    • What is Firmware?
+    • What is an Alert?
+    • What is a Command?
+    • What is a Notification?
+
+Deliverables:
+    • Entity list
+    • Relationships
+    • Business rules
+
+
+Phase 3 ─ Database Design
+-------------------------
+Goal:
+    Convert the domain model into PostgreSQL tables.
+
+Topics:
+    • Tables
+    • Columns
+    • Primary Keys
+    • Foreign Keys
+    • Constraints
+    • Indexes
+    • Normalization
+    • Entity Relationships
+    • Migrations
+    • Partitioning (later)
+
+Deliverables:
+    • ER Diagram
+    • SQL Schema
+    • Spring Entities
+
+
+Phase 4 ─ Authentication & Authorization
+----------------------------------------
+Goal:
+    Secure users and devices.
+
+Users:
+    • JWT Authentication
+    • Roles
+    • Permissions
+
+Devices:
+    • Device Secret
+    • API Keys
+    • Certificates (future)
+
+Questions:
+    • Who owns a device?
+    • Can projects be shared?
+    • Can multiple users access the same device?
+
+
+Phase 5 ─ REST API Design
+-------------------------
+Goal:
+    Design clean REST endpoints.
+
+Examples:
+    POST   /auth/login
+    POST   /devices
+    GET    /devices
+    GET    /devices/{id}
+    POST   /telemetry
+    GET    /telemetry
+    POST   /commands
+    GET    /alerts
+
+Topics:
+    • DTOs
+    • Validation
+    • Pagination
+    • Filtering
+    • API Versioning
+
+
+Phase 6 ─ MQTT Integration
+--------------------------
+Goal:
+    Support IoT communication.
+
+Topics:
+    • Broker (Mosquitto)
+    • Topics
+    • Publishers
+    • Subscribers
+    • QoS
+    • Retained Messages
+    • Last Will
+    • Device Authentication
+
+
+Phase 7 ─ Real-Time Communication
+---------------------------------
+Goal:
+    Push live updates to dashboards.
+
+Topics:
+    • Spring WebSocket
+    • STOMP
+    • Dashboard Updates
+    • Live Telemetry
+    • Device Status
+    • Notifications
+
+
+Phase 8 ─ Device Lifecycle
+--------------------------
+Goal:
+    Manage devices from birth to retirement.
+
+Lifecycle:
+    Register
+        ↓
+    Provision
+        ↓
+    Authenticate
+        ↓
+    Send Telemetry
+        ↓
+    Receive Commands
+        ↓
+    Firmware Update
+        ↓
+    Decommission
+
+
+Phase 9 ─ Command System
+------------------------
+Goal:
+    Send commands to devices reliably.
+
+Topics:
+    • Queue Commands
+    • Acknowledgements
+    • Retries
+    • Timeouts
+    • Delivery Status
+    • Command History
+
+
+Phase 10 ─ Storage
+------------------
+Goal:
+    Store all application data.
+
+Structured:
+    • PostgreSQL
+
+Files:
+    • Images
+    • Firmware
+    • Videos
+    • Logs
+
+Future:
+    • Object Storage
+
+
+Phase 11 ─ Background Services
+------------------------------
+Goal:
+    Run scheduled jobs.
+
+Examples:
+    • Cleanup Old Telemetry
+    • Offline Detection
+    • Alert Processing
+    • Daily Reports
+    • Firmware Scheduling
+    • Backup Tasks
+
+
+Phase 12 ─ Infrastructure
+-------------------------
+Goal:
+    Build the server environment.
+
+Topics:
+    • Ubuntu Server
+    • Docker
+    • Docker Compose
+    • Nginx
+    • Mosquitto
+    • PostgreSQL
+    • SSH
+    • Firewall
+    • SSL Certificates
+    • DNS
+
+
+Phase 13 ─ Security
+-------------------
+Goal:
+    Secure the platform.
+
+Topics:
+    • HTTPS
+    • TLS
+    • JWT
+    • Password Hashing
+    • API Keys
+    • CORS
+    • SQL Injection Prevention
+    • XSS
+    • CSRF
+    • Secrets Management
+
+
+Phase 14 ─ Monitoring & Logging
+-------------------------------
+Goal:
+    Observe platform health.
+
+Topics:
+    • Application Logs
+    • MQTT Logs
+    • Database Logs
+    • Health Endpoints
+    • Metrics
+    • Error Tracking
+    • Disk Usage
+    • CPU Usage
+    • Memory Usage
+
+
+Phase 15 ─ Deployment
+---------------------
+Goal:
+    Deploy and maintain the platform.
+
+Topics:
+    • Git
+    • CI/CD (optional)
+    • Docker Compose
+    • Database Migrations
+    • Rolling Updates
+    • Backup & Restore
+    • Disaster Recovery
+
+
+Phase 16 ─ Scaling (Future)
+---------------------------
+Goal:
+    Support thousands of devices.
+
+Topics:
+    • Redis
+    • Load Balancing
+    • Reverse Proxy
+    • Database Replication
+    • Caching
+    • Message Queues
+    • Kubernetes
+    • High Availability
+
+
+===========================================================
+LEARNING ORDER (Recommended)
+===========================================================
+
+1.  High-Level Architecture          ✅
+2.  Domain Modeling
+3.  Database Design
+4.  Authentication
+5.  REST API Design
+6.  MQTT Integration
+7.  WebSocket
+8.  Device Lifecycle
+9.  Command System
+10. Storage
+11. Background Services
+12. Infrastructure
+13. Security
+14. Monitoring & Logging
+15. Deployment
+16. Scaling

@@ -1,0 +1,30 @@
+
+
+
+RAM Calculation:
+Spring Boot Backend: Manages JSON processing, authenticates device tokens, runs scheduling tasks, and handles user API endpoints. Under concurrent load, the JVM thread pool scales up.
+~600 MB
+
+PostgreSQL Database: Configured with 512MB for shared buffers (highly recommended to cache frequent IoT writes) plus memory allocation for a ~60-connection pool.
+~812 MB
+
+MQTT Broker(e.g., Eclipse Mosquitto): Maintains 500 lightweight, persistent TCP connections with devices. Incredibly efficient.	
+~80 MB
+
+Forgejo & Nginx Proxy: Handles your private git management and securely acts as the single web entryway to your server.	
+~170 MB
+
+Total Estimated RAM: ~1.66 GB
+
+
+Checklist to install, configure, and implement next :
+
+1. Infrastructure & Routing (On the Host)Since you are hosting multiple containers (Forgejo, Spring Boot, PostgreSQL) on a single machine, you need a way to guide external traffic to the right container.A Reverse Proxy: Install Caddy or Nginx. Caddy is highly recommended for single-server setups because it automatically provisions and updates free SSL/TLS certificates (HTTPS) for you with just two lines of configuration.Domain Names / DNS: You need a domain name (or subdomains) pointing to your server's IP address:://yourdomain.com → Routes to Forgejo (Port 3000)://yourdomain.com → Routes to Spring Boot (Port 8080)
+
+2. The IoT Ingestion LayerDo not have 500 devices hit Spring Boot via standard HTTP REST endpoints. If 500 devices try to connect via HTTP at the exact same second, your Spring Boot thread pool will choke, and RAM usage will skyrocket.An MQTT Broker (e.g., Mosquitto Container): Install a lightweight MQTT broker. The 500 devices will maintain a single, open, ultra-lightweight socket to Mosquitto.Spring Integration MQTT: Add this library to your Spring Boot project. It allows Spring Boot to act as a single "subscriber" to Mosquitto. Instead of managing 500 incoming connections, Spring Boot only manages one internal connection to the broker, saving massive amounts of RAM.
+
+3. Database Optimization for IoT (TimescaleDB)Standard PostgreSQL will slow down significantly after a few weeks of 500 devices continuously inserting telemetry data.TimescaleDB Extension: Instead of plain PostgreSQL, use the official Docker image timescale/timescale-ha:pg16. It converts PostgreSQL into a high-performance time-series database. It automatically chunks your IoT data by time, allows you to compress old data by up to 90% (saving disk space), and speeds up your telemetry queries exponentially.
+
+4. Data Safety (The Most Critical Step)Because everything lives on one single server, a hardware failure or a corrupted Docker volume means you lose your Forgejo repository, your application code, and all your device data.Volume Backups: Set up a daily CRON job on the server host that targets your Docker volumes (specifically the PostgreSQL and Forgejo data folders).Offsite Storage: Use a script to securely upload those encrypted backup files to an external cheap cloud object storage (like AWS S3 or Backblaze B2) so you can restore your entire server in minutes if it catches fire.
+
+5. Automated Deployment (Forgejo CI/CD)To replace the GitHub Actions workflow, you need a worker engine to actually execute your code builds.Forgejo Runner: You need to install the Forgejo Runner daemon on your server. When you push your Spring Boot code to Forgejo, this runner will trigger, execute your tests, compile your .jar file, build the new Docker image, and restart your backend container automatically.
