@@ -2,6 +2,12 @@ spring:
   application:
     name: iot-backend
   datasource:
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 30000
+      max-lifetime: 60000
+      connection-timeout: 30000
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/iot_backend}
     username: ${SPRING_DATASOURCE_USERNAME:iot_backend}
     password: ${SPRING_DATASOURCE_PASSWORD:iot_backend}
