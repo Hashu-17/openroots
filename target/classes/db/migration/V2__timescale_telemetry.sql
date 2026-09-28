@@ -13,6 +13,9 @@ SELECT create_hypertable(
 );
 
 -- Time-series access pattern: sensor + timebox
+CREATE INDEX idx_project_member_project
+    ON project_member(project_id);
+
 CREATE INDEX IF NOT EXISTS idx_telemetry_sensor_time
     ON telemetry (sensor_id, recorded_at DESC);
 

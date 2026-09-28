@@ -61,17 +61,21 @@ CREATE TABLE sensor (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     device_id       UUID NOT NULL REFERENCES device(id) ON DELETE CASCADE,
     channel_name    VARCHAR(255) NOT NULL,
-    unit            VARCHAR(50)
+    unit            VARCHAR(50),
+
+    UNIQUE (device_id, channel_name)  -- each device has unique channel names
 );
 
 CREATE INDEX idx_sensor_device ON sensor(device_id);
 
 -- High-volume, append-only. Consider partitioning by recorded_at later (Phase 3 note).
 CREATE TABLE telemetry (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID NOT NULL DEFAULT gen_random_uuid(),
     sensor_id       UUID NOT NULL REFERENCES sensor(id) ON DELETE CASCADE,
     value           DOUBLE PRECISION NOT NULL,
-    recorded_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    recorded_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    PRIMARY KEY (sensor_id, recorded_at)  -- composite PK for time-series uniqueness
 );
 
 CREATE INDEX idx_telemetry_sensor_time ON telemetry(sensor_id, recorded_at DESC);
@@ -91,7 +95,7 @@ CREATE TABLE alert (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     device_id       UUID NOT NULL REFERENCES device(id) ON DELETE CASCADE,
     rule            TEXT NOT NULL,
-    severity        VARCHAR(50) NOT NULL DEFAULT 'info',
+    severity        VARCHAR(50) NOT NULL DEFAULT 'info' CHECK (severity IN ('info', 'low', 'medium', 'high', 'critical')),
     triggered_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
