@@ -1,0 +1,206 @@
+openapi: 3.0.3
+info:
+  title: OpenRoots API
+  version: 0.1.0
+  description: REST API for the OpenRoots self-hosted IoT platform.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: Authentication
+  - name: Devices
+  - name: Telemetry
+paths:
+  /api/v1/auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a user
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email already registered
+  /api/v1/auth/login:
+    post:
+      tags: [Authentication]
+      summary: Log in and receive a JWT
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/devices:
+    get:
+      tags: [Devices]
+      summary: List devices
+      operationId: listDevices
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Devices returned
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Devices]
+      summary: Register a device
+      operationId: registerDevice
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCreateRequest'
+      responses:
+        '201':
+          description: Device registered
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/devices/{deviceId}:
+    get:
+      tags: [Devices]
+      summary: Get a device
+      operationId: getDevice
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Device returned
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/telemetry:
+    get:
+      tags: [Telemetry]
+      summary: List telemetry
+      operationId: listTelemetry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: deviceId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Telemetry returned
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Telemetry]
+      summary: Ingest telemetry
+      operationId: ingestTelemetry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryIngestRequest'
+      responses:
+        '201':
+          description: Telemetry accepted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+    LoginRequest:
+      $ref: '#/components/schemas/RegisterRequest'
+    AuthResponse:
+      type: object
+      required: [accessToken, tokenType]
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          example: Bearer
+    DeviceCreateRequest:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+    TelemetryIngestRequest:
+      type: object
+      required: [deviceId, capturedAt, payload]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        capturedAt:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties: true
+  responses:
+    BadRequest:
+      description: Request validation failed
+    Unauthorized:
+      description: Authentication required or invalid
+    Forbidden:
+      description: Authenticated user is not allowed to perform this operation
+    NotFound:
+      description: Resource not found
