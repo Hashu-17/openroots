@@ -50,22 +50,48 @@ paths:
                 $ref: '#/components/schemas/AuthResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
-  /api/v1/devices:
+  /api/v1/projects:
+    get:
+      tags: [Projects]
+      summary: List projects
+      operationId: listProjects
+      security: []
+      responses:
+        '200':
+          description: Projects returned
+  /api/v1/projects/{projectId}:
+    get:
+      tags: [Projects]
+      summary: Get a project
+      operationId: getProject
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Project returned
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/projects/{projectId}/devices:
     get:
       tags: [Devices]
-      summary: List devices
+      summary: List project devices
       operationId: listDevices
-      security:
-        - bearerAuth: []
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
       responses:
         '200':
           description: Devices returned
+        '404':
+          $ref: '#/components/responses/NotFound'
         '401':
           $ref: '#/components/responses/Unauthorized'
-    post:
+      summary: Register a device with sensors
       tags: [Devices]
-      summary: Register a device
-      operationId: registerDevice
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
       security:
         - bearerAuth: []
       requestBody:
@@ -83,14 +109,14 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-  /api/v1/devices/{deviceId}:
+  /api/v1/projects/{projectId}/devices/{deviceId}:
     get:
       tags: [Devices]
-      summary: Get a device
+      summary: Get a project device and its sensors
       operationId: getDevice
-      security:
-        - bearerAuth: []
+      security: []
       parameters:
+        - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/DeviceId'
       responses:
         '200':
@@ -144,6 +170,13 @@ components:
       scheme: bearer
       bearerFormat: JWT
   parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     DeviceId:
       name: deviceId
       in: path
@@ -176,12 +209,69 @@ components:
           example: Bearer
     DeviceCreateRequest:
       type: object
-      required: [name, type]
+      required: [name, type, sensors]
       properties:
         name:
           type: string
         type:
           type: string
+        sensors:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SensorCreateRequest'
+    SensorCreateRequest:
+      type: object
+      required: [channelName]
+      properties:
+        channelName:
+          type: string
+        unit:
+          type: string
+    ProjectResponse:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    SensorResponse:
+      allOf:
+        - $ref: '#/components/schemas/SensorCreateRequest'
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              format: uuid
+    DeviceResponse:
+      type: object
+      required: [id, projectId, name, type, status, registeredAt, sensors]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        registeredAt:
+          type: string
+          format: date-time
+        sensors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SensorResponse'
     TelemetryIngestRequest:
       type: object
       required: [deviceId, capturedAt, payload]

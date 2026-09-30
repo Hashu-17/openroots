@@ -61,7 +61,7 @@ CREATE TABLE sensor (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     device_id       UUID NOT NULL REFERENCES device(id) ON DELETE CASCADE,
     channel_name    VARCHAR(255) NOT NULL,
-    unit            VARCHAR(50),
+    unit            VARCHAR(50), 
 
     UNIQUE (device_id, channel_name)  -- each device has unique channel names
 );

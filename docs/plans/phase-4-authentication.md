@@ -1,5 +1,10 @@
 # Phase 4 Implementation Plan
 
+The first device-registration slice uses a development-only seeded owner and
+currently permits requests so the persistence and API workflow can be tested.
+Phase 4 must replace that seed identity with the authenticated JWT principal
+before enabling project-level authorization.
+
 ## Goal
 
 Secure human users, projects, devices, and telemetry without changing the public behavior of unrelated modules.

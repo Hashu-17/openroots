@@ -15,11 +15,12 @@ import org.springframework.web.bind.annotation.RestController;
 import com.yourcompany.ingestion.common.response.ApiResponse;
 import com.yourcompany.ingestion.device.dto.DeviceCreateRequest;
 import com.yourcompany.ingestion.device.dto.DeviceResponse;
-import com.yourcompany.ingestion.device.model.Device;
+import com.yourcompany.ingestion.device.dto.SensorResponse;
+import com.yourcompany.ingestion.device.model.DeviceEntity;
 import com.yourcompany.ingestion.device.service.DeviceService;
 
 @RestController
-@RequestMapping("/api/v1/devices")
+@RequestMapping("/api/v1/projects/{projectId}/devices")
 public class DeviceController {
 
     private final DeviceService deviceService;
@@ -29,23 +30,38 @@ public class DeviceController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<DeviceResponse>> registerDevice(@Valid @RequestBody DeviceCreateRequest request) {
-        Device device = deviceService.register(request);
+    public ResponseEntity<ApiResponse<DeviceResponse>> registerDevice(
+            @PathVariable UUID projectId,
+            @Valid @RequestBody DeviceCreateRequest request) {
+        DeviceEntity device = deviceService.register(projectId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Device registered", toResponse(device)));
     }
 
     @GetMapping
-    public ApiResponse<List<DeviceResponse>> listDevices() {
-        return ApiResponse.success("Devices fetched", deviceService.findAll().stream().map(this::toResponse).toList());
+    public ApiResponse<List<DeviceResponse>> listDevices(@PathVariable UUID projectId) {
+        return ApiResponse.success("Devices fetched", deviceService.findByProject(projectId).stream()
+                .map(this::toResponse)
+                .toList());
     }
 
     @GetMapping("/{deviceId}")
-    public ApiResponse<DeviceResponse> getDevice(@PathVariable UUID deviceId) {
-        return ApiResponse.success("Device fetched", toResponse(deviceService.findById(deviceId)));
+    public ApiResponse<DeviceResponse> getDevice(
+            @PathVariable UUID projectId,
+            @PathVariable UUID deviceId) {
+        return ApiResponse.success("Device fetched", toResponse(deviceService.findById(projectId, deviceId)));
     }
 
-    private DeviceResponse toResponse(Device device) {
-        return new DeviceResponse(device.id(), device.name(), device.type(), device.registeredAt());
+    private DeviceResponse toResponse(DeviceEntity device) {
+        return new DeviceResponse(
+                device.getId(),
+                device.getProject().getId(),
+                device.getName(),
+                device.getType(),
+                device.getStatus(),
+                device.getRegisteredAt(),
+                device.getSensors().stream()
+                        .map(sensor -> new SensorResponse(sensor.getId(), sensor.getChannelName(), sensor.getUnit()))
+                        .toList());
     }
 }

@@ -1,4 +1,4 @@
-package com.yourcompany.iot;
+package com.yourcompany.ingestion;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
