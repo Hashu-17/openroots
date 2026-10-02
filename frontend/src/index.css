@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #101416;
+  --white: #171e20;
+  --ink: #e7ebe7;
+  --muted: #82918e;
+  --line: #2a3335;
+  --mist: #263234;
+  --coral: #dc755d;
+  --teal: #41c7a1;
+  --gold: #e6b85a;
+  --sans: arcadia, ui-sans-serif, system-ui, sans-serif;
+  --display: arcadiaDisplay, Georgia, 'Times New Roman', serif;
+  --mono: 'Cascadia Code', Consolas, monospace;
+  font: 16px/1.45 var(--sans);
+  color: var(--ink);
+  background: var(--paper);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: var(--paper); }
+button, input, select { font: inherit; }
+
+::selection { background: rgba(65, 199, 161, .28); color: #f1f3ed; }
