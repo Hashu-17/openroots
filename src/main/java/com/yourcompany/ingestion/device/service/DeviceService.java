@@ -9,6 +9,7 @@ import com.yourcompany.ingestion.device.repository.DeviceRepository;
 import com.yourcompany.ingestion.project.model.ProjectEntity;
 import com.yourcompany.ingestion.project.repository.ProjectRepository;
 import jakarta.transaction.Transactional;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -61,8 +62,20 @@ public class DeviceService {
                 .orElseThrow(() -> new NotFoundException("Device not found: " + deviceId));
     }
 
+    @Transactional
+    public void delete(UUID projectId, UUID deviceId) {
+        deviceRepository.delete(findById(projectId, deviceId));
+    }
+
     public boolean exists(UUID deviceId) {
         return deviceRepository.existsById(deviceId);
+    }
+
+    @Transactional
+    public void markOnline(UUID deviceId) {
+        DeviceEntity device = deviceRepository.findById(deviceId)
+                .orElseThrow(() -> new NotFoundException("Device not found: " + deviceId));
+        device.markOnline(Instant.now());
     }
 
     private void requireProject(UUID projectId) {

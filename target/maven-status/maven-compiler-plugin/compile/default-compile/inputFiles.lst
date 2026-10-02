@@ -29,6 +29,7 @@ E:\OpenRoots\src\main\java\com\yourcompany\ingestion\telemetry\controller\Teleme
 E:\OpenRoots\src\main\java\com\yourcompany\ingestion\telemetry\dto\TelemetryIngestRequest.java
 E:\OpenRoots\src\main\java\com\yourcompany\ingestion\telemetry\dto\TelemetryResponse.java
 E:\OpenRoots\src\main\java\com\yourcompany\ingestion\telemetry\model\TelemetryRecord.java
+E:\OpenRoots\src\main\java\com\yourcompany\ingestion\telemetry\repository\TelemetryRepository.java
 E:\OpenRoots\src\main\java\com\yourcompany\ingestion\telemetry\service\TelemetryService.java
 E:\OpenRoots\src\main\java\com\yourcompany\ingestion\user\model\UserEntity.java
 E:\OpenRoots\src\main\java\com\yourcompany\ingestion\user\repository\UserRepository.java

@@ -1,52 +1,60 @@
 package com.yourcompany.ingestion.telemetry.service;
 
 import java.time.Instant;
-import java.util.Comparator;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ConcurrentMap;
+import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import com.yourcompany.ingestion.common.exception.NotFoundException;
 import com.yourcompany.ingestion.device.service.DeviceService;
 import com.yourcompany.ingestion.telemetry.dto.TelemetryIngestRequest;
 import com.yourcompany.ingestion.telemetry.model.TelemetryRecord;
+import com.yourcompany.ingestion.telemetry.repository.TelemetryRepository;
+import com.yourcompany.ingestion.telemetry.repository.TelemetryRepository.TelemetryPoint;
 
 @Service
 public class TelemetryService {
 
     private final DeviceService deviceService;
-    private final ConcurrentMap<UUID, List<TelemetryRecord>> telemetryByDevice = new ConcurrentHashMap<>();
+    private final TelemetryRepository telemetryRepository;
 
-    public TelemetryService(DeviceService deviceService) {
+    public TelemetryService(DeviceService deviceService, TelemetryRepository telemetryRepository) {
         this.deviceService = deviceService;
+        this.telemetryRepository = telemetryRepository;
     }
 
+    @Transactional
     public TelemetryRecord ingest(TelemetryIngestRequest request) {
         if (!deviceService.exists(request.deviceId())) {
             throw new NotFoundException("Device not found: " + request.deviceId());
         }
 
+        Instant capturedAt = request.capturedAt() == null ? Instant.now() : request.capturedAt();
         TelemetryRecord record = new TelemetryRecord(
-                UUID.randomUUID(),
+                recordId(request.deviceId(), capturedAt),
                 request.deviceId(),
-                request.capturedAt() == null ? Instant.now() : request.capturedAt(),
+                capturedAt,
                 Map.copyOf(request.payload()));
 
-        telemetryByDevice.computeIfAbsent(request.deviceId(), key -> new CopyOnWriteArrayList<>())
-                .add(record);
+        for (Map.Entry<String, Object> entry : request.payload().entrySet()) {
+            if (!(entry.getValue() instanceof Number number)) {
+                throw new IllegalArgumentException("Telemetry value must be numeric: " + entry.getKey());
+            }
+            if (!telemetryRepository.save(request.deviceId(), entry.getKey(), number.doubleValue(), capturedAt)) {
+                throw new NotFoundException("Sensor not found for device: " + entry.getKey());
+            }
+        }
+        deviceService.markOnline(request.deviceId());
 
         return record;
     }
 
     public List<TelemetryRecord> findAll() {
-        return telemetryByDevice.values().stream()
-                .flatMap(List::stream)
-                .sorted(Comparator.comparing(TelemetryRecord::capturedAt).reversed())
-                .toList();
+        return toRecords(telemetryRepository.findAll());
     }
 
     public List<TelemetryRecord> findByDevice(UUID deviceId) {
@@ -54,8 +62,40 @@ public class TelemetryService {
             throw new NotFoundException("Device not found: " + deviceId);
         }
 
-        return telemetryByDevice.getOrDefault(deviceId, List.of()).stream()
-                .sorted(Comparator.comparing(TelemetryRecord::capturedAt).reversed())
-                .toList();
+        return toRecords(telemetryRepository.findByDevice(deviceId));
+    }
+
+    private List<TelemetryRecord> toRecords(List<TelemetryPoint> points) {
+        Map<String, TelemetryRecordBuilder> grouped = new LinkedHashMap<>();
+        for (TelemetryPoint point : points) {
+            String key = point.deviceId() + "|" + point.capturedAt();
+            grouped.computeIfAbsent(key, ignored -> new TelemetryRecordBuilder(
+                    point.deviceId(), point.capturedAt()))
+                    .payload.put(point.channelName(), point.value());
+        }
+        return grouped.values().stream().map(TelemetryRecordBuilder::build).toList();
+    }
+
+    private UUID recordId(UUID deviceId, Instant capturedAt) {
+        return UUID.nameUUIDFromBytes((deviceId + "|" + capturedAt).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static final class TelemetryRecordBuilder {
+        private final UUID deviceId;
+        private final Instant capturedAt;
+        private final Map<String, Object> payload = new LinkedHashMap<>();
+
+        private TelemetryRecordBuilder(UUID deviceId, Instant capturedAt) {
+            this.deviceId = deviceId;
+            this.capturedAt = capturedAt;
+        }
+
+        private TelemetryRecord build() {
+            return new TelemetryRecord(
+                    UUID.nameUUIDFromBytes((deviceId + "|" + capturedAt).getBytes(StandardCharsets.UTF_8)),
+                    deviceId,
+                    capturedAt,
+                    Map.copyOf(payload));
+        }
     }
 }

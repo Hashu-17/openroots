@@ -90,6 +90,11 @@ public class DeviceEntity {
         return status;
     }
 
+    public void markOnline(Instant seenAt) {
+        status = "online";
+        lastSeenAt = seenAt;
+    }
+
     public Instant getRegisteredAt() {
         return registeredAt;
     }

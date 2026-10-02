@@ -1,4 +1,5 @@
 com\yourcompany\ingestion\device\dto\SensorCreateRequest.class
+com\yourcompany\ingestion\telemetry\repository\TelemetryRepository.class
 com\yourcompany\ingestion\config\OpenApiConfig.class
 com\yourcompany\ingestion\config\SecurityConfig.class
 com\yourcompany\ingestion\device\model\SensorEntity.class
@@ -8,9 +9,11 @@ com\yourcompany\ingestion\config\DevelopmentDataInitializer.class
 com\yourcompany\ingestion\device\repository\DeviceRepository.class
 com\yourcompany\ingestion\user\model\UserEntity.class
 com\yourcompany\ingestion\common\exception\GlobalExceptionHandler.class
+com\yourcompany\ingestion\telemetry\service\TelemetryService$TelemetryRecordBuilder.class
 com\yourcompany\ingestion\device\controller\DeviceController.class
 com\yourcompany\ingestion\device\model\Device.class
 com\yourcompany\ingestion\telemetry\service\TelemetryService.class
+com\yourcompany\ingestion\telemetry\repository\TelemetryRepository$TelemetryPoint.class
 com\yourcompany\ingestion\IoTApplication.class
 com\yourcompany\ingestion\project\dto\ProjectResponse.class
 com\yourcompany\ingestion\telemetry\model\TelemetryRecord.class
