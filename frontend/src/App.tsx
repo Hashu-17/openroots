@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import * as Select from '@radix-ui/react-select'
 import * as Tooltip from '@radix-ui/react-tooltip'
+import DevicesView from './DevicesView'
+import TelemetryPanel from './TelemetryPanel'
 import {
   ArrowLeft,
   Check,
@@ -12,6 +14,7 @@ import {
   Plus,
   Radio,
   Settings2,
+  Trash2,
   Users,
   X,
 } from 'lucide-react'
@@ -28,6 +31,7 @@ type Device = {
   sensors: Sensor[]
 }
 type SensorDraft = { channelName: string; unit: string }
+type TelemetryRecord = { id: string; deviceId: string; capturedAt: string; payload: Record<string, unknown> }
 type ApiResponse<T> = { success: boolean; message: string; data: T }
 type View = 'projects' | 'project'
 type ProjectTab = 'overview' | 'devices' | 'members' | 'settings'
@@ -47,7 +51,10 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   } catch {
     throw new Error(`Backend returned an invalid response (${response.status}).`)
   }
-  if (!response.ok || !body?.success) throw new Error(body?.message || `Backend request failed (${response.status}).`)
+  if (!response.ok || !body?.success) {
+    const details = Array.isArray(body?.data) ? `: ${body.data.join(', ')}` : ''
+    throw new Error(`${body?.message || `Backend request failed (${response.status}).`}${details}`)
+  }
   return body.data
 }
 
@@ -68,6 +75,10 @@ function App() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [telemetryDevice, setTelemetryDevice] = useState<Device | null>(null)
+  const [telemetry, setTelemetry] = useState<TelemetryRecord[]>([])
+  const [telemetryLoading, setTelemetryLoading] = useState(false)
+  const [telemetryError, setTelemetryError] = useState('')
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId)
 
@@ -88,12 +99,35 @@ function App() {
     setDevices(await request<Device[]>(`/api/v1/projects/${projectId}/devices`))
   }
 
+  async function showTelemetry(device: Device) {
+    setTelemetryDevice(device)
+    setTelemetry([])
+    setTelemetryError('')
+    setTelemetryLoading(true)
+    try {
+      setTelemetry(await request<TelemetryRecord[]>(`/api/v1/telemetry?deviceId=${device.id}`))
+    } catch (cause) {
+      setTelemetryError(cause instanceof Error ? cause.message : 'Unable to load telemetry.')
+    } finally {
+      setTelemetryLoading(false)
+    }
+  }
+
   useEffect(() => { void loadProjects() }, [])
 
   useEffect(() => {
     if (view !== 'project' || !selectedProjectId) return
     void loadDevices(selectedProjectId).catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to load devices.'))
   }, [selectedProjectId, view])
+
+  useEffect(() => {
+    if (view !== 'project' || tab !== 'devices' || !selectedProjectId) return
+    const refreshDevices = () => {
+      void loadDevices(selectedProjectId).catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to refresh devices.'))
+    }
+    const interval = window.setInterval(refreshDevices, 5000)
+    return () => window.clearInterval(interval)
+  }, [selectedProjectId, tab, view])
 
   function openProject(projectId: string) {
     setSelectedProjectId(projectId)
@@ -118,6 +152,7 @@ function App() {
     setNotice('')
     const names = sensors.map((sensor) => sensor.channelName.trim()).filter(Boolean)
     if (!selectedProjectId || !deviceName.trim() || !deviceType.trim() || names.length === 0) return setError('Enter a device name, type, and at least one sensor.')
+    if (sensors.some((sensor) => !sensor.channelName.trim())) return setError('Every sensor needs a channel name.')
     if (new Set(names).size !== names.length) return setError('Sensor channel names must be unique.')
     setSubmitting(true)
     try {
@@ -132,6 +167,20 @@ function App() {
       setError(cause instanceof Error ? cause.message : 'Unable to register device.')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function deleteDevice(deviceId: string) {
+    const device = devices.find((item) => item.id === deviceId)
+    if (!device || !window.confirm(`Delete ${device.name}? This permanently removes its sensors and telemetry.`)) return
+    setError('')
+    setNotice('')
+    try {
+      await request<void>(`/api/v1/projects/${selectedProjectId}/devices/${deviceId}`, { method: 'DELETE' })
+      await loadDevices(selectedProjectId)
+      setNotice(`${device.name} and all of its telemetry were deleted.`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to delete device.')
     }
   }
 
@@ -174,7 +223,7 @@ function App() {
               {tab === 'overview' && <section className="grid gap-4 md:grid-cols-3"><div className="border border-[#2b3537] bg-[#171e20] p-6"><p className="font-mono text-[10px] uppercase tracking-[.12em] text-[#6f817f]">Registered devices</p><strong className="mt-5 block font-display text-5xl text-[#f1f3ed]">{devices.length}</strong><span className="mt-2 block text-sm text-[#82918e]">Hardware in this project</span></div><div className="border border-[#2b3537] bg-[#171e20] p-6"><p className="font-mono text-[10px] uppercase tracking-[.12em] text-[#6f817f]">Sensor channels</p><strong className="mt-5 block font-display text-5xl text-[#e6b85a]">{devices.reduce((total, device) => total + device.sensors.length, 0)}</strong><span className="mt-2 block text-sm text-[#82918e]">Ready for telemetry</span></div><div className="border border-[#2b3537] bg-[#171e20] p-6"><p className="font-mono text-[10px] uppercase tracking-[.12em] text-[#6f817f]">Members</p><strong className="mt-5 block font-display text-5xl text-[#82918e]">—</strong><span className="mt-2 block text-sm text-[#82918e]">Member management is coming later</span></div></section>}
               {tab === 'members' && <Unavailable title="Member management is not enabled yet" description="Authentication and project roles are the next backend boundary." icon={<Users className="size-6" />} />}
               {tab === 'settings' && <Unavailable title="Project settings are not enabled yet" description="Project creation and configuration will arrive with the next management slice." icon={<Settings2 className="size-6" />} />}
-              {tab === 'devices' && <DevicesView devices={devices} loading={loading} error={error} notice={notice} deviceName={deviceName} deviceType={deviceType} sensors={sensors} submitting={submitting} onSubmit={registerDevice} setDeviceName={setDeviceName} setDeviceType={setDeviceType} setSensors={setSensors} updateSensor={updateSensor} removeSensor={(index) => setSensors((current) => current.filter((_, sensorIndex) => sensorIndex !== index))} />}
+              {tab === 'devices' && <><DevicesView devices={devices} loading={loading} error={error} notice={notice} deviceName={deviceName} deviceType={deviceType} sensors={sensors} submitting={submitting} onSubmit={registerDevice} onShowTelemetry={showTelemetry} setDeviceName={setDeviceName} setDeviceType={setDeviceType} setSensors={setSensors} updateSensor={updateSensor} removeSensor={(index) => setSensors((current) => current.filter((_, sensorIndex) => sensorIndex !== index))} />{telemetryDevice && <TelemetryPanel deviceName={telemetryDevice.name} records={telemetry} loading={telemetryLoading} error={telemetryError} onClose={() => setTelemetryDevice(null)} />}<DeleteDevicePanel devices={devices} onDelete={deleteDevice} /></>}
             </>
           )}
         </main>
@@ -188,8 +237,15 @@ function Unavailable({ title, description, icon }: { title: string; description:
   return <div className="flex min-h-72 flex-col items-center justify-center border border-dashed border-[#394345] px-6 text-center"><span className="mb-4 text-[#6f817f]">{icon}</span><h2 className="font-display text-2xl font-bold text-[#e7ebe7]">{title}</h2><p className="mt-2 max-w-md text-sm text-[#82918e]">{description}</p></div>
 }
 
-function DevicesView({ devices, loading, error, notice, deviceName, deviceType, sensors, submitting, onSubmit, setDeviceName, setDeviceType, setSensors, updateSensor, removeSensor }: { devices: Device[]; loading: boolean; error: string; notice: string; deviceName: string; deviceType: string; sensors: SensorDraft[]; submitting: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void; setDeviceName: (value: string) => void; setDeviceType: (value: string) => void; setSensors: React.Dispatch<React.SetStateAction<SensorDraft[]>>; updateSensor: (index: number, field: keyof SensorDraft, value: string) => void; removeSensor: (index: number) => void }) {
-  return <section className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,.85fr)]"><div className="min-h-[480px] border border-[#2b3537] bg-[#171e20]"><div className="flex items-center justify-between border-b border-[#2b3537] px-5 py-5 sm:px-7"><div><p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#6f817f]">Hardware inventory</p><h2 className="font-display text-xl font-bold text-[#f1f3ed]">Devices</h2></div><span className="bg-[#263234] px-2 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[.08em] text-[#82918e]">{devices.length.toString().padStart(2, '0')} total</span></div>{error && <div className="m-5 border-l-4 border-[#dc755d] bg-[#321f1d] px-4 py-3 text-sm text-[#f1b0a0]">{error}</div>}{notice && <div className="m-5 border-l-4 border-[#41c7a1] bg-[#172825] px-4 py-3 text-sm text-[#91ddc4]">{notice}</div>}{loading ? <div className="flex min-h-80 items-center justify-center gap-3 text-sm text-[#82918e]"><LoaderCircle className="size-5 animate-spin text-[#41c7a1]" />Loading devices...</div> : devices.length === 0 ? <div className="flex min-h-80 flex-col items-center justify-center gap-2 px-7 text-center text-sm text-[#82918e]"><Radio className="mb-2 size-10 text-[#6f817f]" /><strong className="font-display text-lg text-[#e7ebe7]">No devices registered</strong><span>Add the first physical device from the form.</span></div> : <div>{devices.map((device) => <article className="grid grid-cols-[36px_1fr_auto] items-start gap-3.5 border-b border-[#2b3537] px-5 py-5 last:border-b-0 sm:px-7" key={device.id}><div className="grid size-9 place-items-center bg-[#202a2c] text-[#e6b85a]"><Radio className="size-4" /></div><div><div className="flex flex-wrap items-center gap-2"><strong className="font-display text-base font-bold text-[#f1f3ed]">{device.name}</strong><span className="bg-[#172825] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-[#41c7a1]">{device.status}</span></div><span className="font-mono text-[11px] text-[#82918e]">{device.type}</span><div className="mt-3 flex flex-wrap gap-1.5">{device.sensors.map((sensor) => <span className="inline-flex items-baseline gap-1.5 bg-[#263234] px-2 py-1.5 font-mono text-[11px] font-semibold text-[#dbe2de]" key={sensor.id}>{sensor.channelName}<small className="text-[9px] font-normal text-[#82918e]">{sensor.unit ?? 'unitless'}</small></span>)}</div></div><time className="font-mono text-[10px] text-[#6f817f]" dateTime={device.registeredAt}>{formatDate(device.registeredAt)}</time></article>)}</div>}</div><form className="border border-[#2b3537] bg-[#171e20] pb-7" onSubmit={onSubmit}><div className="mb-7 border-b border-[#2b3537] px-5 py-5 sm:px-7"><p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#6f817f]">Add hardware</p><h2 className="font-display text-xl font-bold text-[#f1f3ed]">Register a device</h2></div><div className="grid gap-3.5 px-5 sm:grid-cols-2 sm:px-7">{([['Device name', deviceName, setDeviceName, 'e.g. North greenhouse'], ['Device type', deviceType, setDeviceType, 'e.g. weather-station']] as const).map(([label, value, setter, placeholder]) => <label className="grid gap-2 font-mono text-[10px] font-bold uppercase tracking-[.08em] text-[#82918e]" key={label}><span>{label}</span><input className="h-11 w-full border border-[#394345] bg-[#111719] px-3 text-sm font-normal normal-case tracking-normal text-[#e7ebe7] outline-none placeholder:text-[#566563] focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" value={value} onChange={(event) => setter(event.target.value)} placeholder={placeholder} /></label>)}</div><div className="mx-5 my-7 flex items-start justify-between gap-3 sm:mx-7"><div><span className="font-mono text-[11px] font-bold uppercase tracking-[.08em] text-[#e7ebe7]">Sensors</span><small className="mt-1.5 block text-xs text-[#82918e]">Define the channels this device exposes.</small></div><button className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 font-mono text-[11px] font-bold text-[#e6b85a] transition hover:text-[#f1f3ed]" type="button" onClick={() => setSensors((current) => [...current, { channelName: '', unit: '' }])}><CirclePlus className="size-4" />Add sensor</button></div><div className="grid gap-2 px-5 sm:px-7">{sensors.map((sensor, index) => <div className="grid grid-cols-[25px_1fr_75px_25px] items-center gap-1.5" key={`${index}-${sensor.channelName}`}><span className="font-mono text-[10px] text-[#6f817f]">{String(index + 1).padStart(2, '0')}</span><input className="h-10 min-w-0 border border-[#394345] bg-[#111719] px-2.5 text-xs text-[#e7ebe7] outline-none placeholder:text-[#566563] focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" aria-label={`Sensor ${index + 1} channel`} value={sensor.channelName} onChange={(event) => updateSensor(index, 'channelName', event.target.value)} placeholder="channel name" /><input className="h-10 min-w-0 border border-[#394345] bg-[#111719] px-2.5 text-xs text-[#e7ebe7] outline-none placeholder:text-[#566563] focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" aria-label={`Sensor ${index + 1} unit`} value={sensor.unit} onChange={(event) => updateSensor(index, 'unit', event.target.value)} placeholder="unit" /><Tooltip.Root><Tooltip.Trigger asChild><button className="grid size-6 place-items-center border-0 bg-transparent text-[#82918e] transition hover:text-[#dc755d] disabled:cursor-not-allowed disabled:opacity-30" type="button" onClick={() => removeSensor(index)} disabled={sensors.length === 1} aria-label={`Remove sensor ${index + 1}`}><X className="size-4" /></button></Tooltip.Trigger><Tooltip.Portal><Tooltip.Content className="rounded bg-[#e7ebe7] px-2 py-1 font-mono text-[10px] text-[#101416]" sideOffset={5}>Remove sensor<Tooltip.Arrow className="fill-[#e7ebe7]" /></Tooltip.Content></Tooltip.Portal></Tooltip.Root></div>)}</div><button className="mx-5 mt-7 flex h-12 w-[calc(100%-2.5rem)] items-center justify-center border-0 bg-[#dc755d] font-mono text-xs font-bold text-[#101416] transition hover:-translate-y-0.5 hover:bg-[#e98972] disabled:cursor-wait disabled:opacity-60 sm:mx-7 sm:w-[calc(100%-3.5rem)]" type="submit" disabled={submitting}>{submitting ? 'Saving device...' : 'Register device →'}</button><p className="mx-5 mt-3 text-[11px] text-[#82918e] sm:mx-7">Saved to the active project in PostgreSQL. Authentication will be added in a later phase.</p></form></section>
+function DeleteDevicePanel({ devices, onDelete }: { devices: Device[]; onDelete: (deviceId: string) => void }) {
+  if (devices.length === 0) return null
+  return <section className="mt-5 border border-[#51302b] bg-[#211817] p-5 sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#dc755d]">Danger zone</p><h2 className="font-display text-xl font-bold text-[#f1f3ed]">Delete a device</h2><p className="mt-2 text-sm text-[#b9928a]">Deleting a device permanently removes its sensors and stored telemetry.</p></div><Trash2 className="size-5 shrink-0 text-[#dc755d]" /></div><div className="mt-5 flex flex-wrap gap-2">{devices.map((device) => <button className="inline-flex items-center gap-2 border border-[#704037] bg-[#321f1d] px-3 py-2 font-mono text-[10px] font-bold text-[#f1b0a0] transition hover:border-[#dc755d] hover:bg-[#452521]" key={device.id} onClick={() => onDelete(device.id)} type="button"><Trash2 className="size-3.5" />{device.name}</button>)}</div></section>
 }
+
+function LegacyDevicesView({ devices, loading, error, notice, deviceName, deviceType, sensors, submitting, onSubmit, setDeviceName, setDeviceType, setSensors, updateSensor, removeSensor }: { devices: Device[]; loading: boolean; error: string; notice: string; deviceName: string; deviceType: string; sensors: SensorDraft[]; submitting: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void; setDeviceName: (value: string) => void; setDeviceType: (value: string) => void; setSensors: React.Dispatch<React.SetStateAction<SensorDraft[]>>; updateSensor: (index: number, field: keyof SensorDraft, value: string) => void; removeSensor: (index: number) => void }) {
+  return <section className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,.85fr)]"><div className="min-h-[480px] border border-[#2b3537] bg-[#171e20]"><div className="flex items-center justify-between border-b border-[#2b3537] px-5 py-5 sm:px-7"><div><p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#6f817f]">Hardware inventory</p><h2 className="font-display text-xl font-bold text-[#f1f3ed]">Devices</h2></div><span className="bg-[#263234] px-2 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[.08em] text-[#82918e]">{devices.length.toString().padStart(2, '0')} total</span></div>{error && <div className="m-5 border-l-4 border-[#dc755d] bg-[#321f1d] px-4 py-3 text-sm text-[#f1b0a0]">{error}</div>}{notice && <div className="m-5 border-l-4 border-[#41c7a1] bg-[#172825] px-4 py-3 text-sm text-[#91ddc4]">{notice}</div>}{loading ? <div className="flex min-h-80 items-center justify-center gap-3 text-sm text-[#82918e]"><LoaderCircle className="size-5 animate-spin text-[#41c7a1]" />Loading devices...</div> : devices.length === 0 ? <div className="flex min-h-80 flex-col items-center justify-center gap-2 px-7 text-center text-sm text-[#82918e]"><Radio className="mb-2 size-10 text-[#6f817f]" /><strong className="font-display text-lg text-[#e7ebe7]">No devices registered</strong><span>Add the first physical device from the form.</span></div> : <div>{devices.map((device) => <article className="grid grid-cols-[36px_1fr_auto] items-start gap-3.5 border-b border-[#2b3537] px-5 py-5 last:border-b-0 sm:px-7" key={device.id}><div className="grid size-9 place-items-center bg-[#202a2c] text-[#e6b85a]"><Radio className="size-4" /></div><div><div className="flex flex-wrap items-center gap-2"><strong className="font-display text-base font-bold text-[#f1f3ed]">{device.name}</strong><span className="bg-[#172825] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-[#41c7a1]">{device.status}</span></div><span className="font-mono text-[11px] text-[#82918e]">{device.type}</span><div className="mt-3"><span className="font-mono text-[9px] font-bold uppercase tracking-[.08em] text-[#6f817f]">Device UUID</span><code className="mt-1 block break-all font-mono text-[11px] text-[#e6b85a] select-all">{device.id}</code></div><div className="mt-3 flex flex-wrap gap-1.5">{device.sensors.map((sensor) => <span className="inline-flex items-baseline gap-1.5 bg-[#263234] px-2 py-1.5 font-mono text-[11px] font-semibold text-[#dbe2de]" key={sensor.id}>{sensor.channelName}<small className="text-[9px] font-normal text-[#82918e]">{sensor.unit ?? 'unitless'}</small></span>)}</div></div><time className="font-mono text-[10px] text-[#6f817f]" dateTime={device.registeredAt}>{formatDate(device.registeredAt)}</time></article>)}</div>}</div><form className="border border-[#2b3537] bg-[#171e20] pb-7" onSubmit={onSubmit}><div className="mb-7 border-b border-[#2b3537] px-5 py-5 sm:px-7"><p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#6f817f]">Add hardware</p><h2 className="font-display text-xl font-bold text-[#f1f3ed]">Register a device</h2></div><div className="grid gap-3.5 px-5 sm:grid-cols-2 sm:px-7">{([['Device name', deviceName, setDeviceName, 'e.g. North greenhouse'], ['Device type', deviceType, setDeviceType, 'e.g. weather-station']] as const).map(([label, value, setter, placeholder]) => <label className="grid gap-2 font-mono text-[10px] font-bold uppercase tracking-[.08em] text-[#82918e]" key={label}><span>{label}</span><input className="h-11 w-full border border-[#394345] bg-[#111719] px-3 text-sm font-normal normal-case tracking-normal text-[#e7ebe7] outline-none placeholder:text-[#566563] focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" value={value} onChange={(event) => setter(event.target.value)} placeholder={placeholder} /></label>)}</div><div className="mx-5 my-7 flex items-start justify-between gap-3 sm:mx-7"><div><span className="font-mono text-[11px] font-bold uppercase tracking-[.08em] text-[#e7ebe7]">Sensors</span><small className="mt-1.5 block text-xs text-[#82918e]">Define the channels this device exposes.</small></div><button className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 font-mono text-[11px] font-bold text-[#e6b85a] transition hover:text-[#f1f3ed]" type="button" onClick={() => setSensors((current) => [...current, { channelName: '', unit: '' }])}><CirclePlus className="size-4" />Add sensor</button></div><div className="grid gap-2 px-5 sm:px-7">{sensors.map((sensor, index) => <div className="grid grid-cols-[25px_1fr_75px_25px] items-center gap-1.5" key={`${index}-${sensor.channelName}`}><span className="font-mono text-[10px] text-[#6f817f]">{String(index + 1).padStart(2, '0')}</span><input className="h-10 min-w-0 border border-[#394345] bg-[#111719] px-2.5 text-xs text-[#e7ebe7] outline-none placeholder:text-[#566563] focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" aria-label={`Sensor ${index + 1} channel`} value={sensor.channelName} onChange={(event) => updateSensor(index, 'channelName', event.target.value)} placeholder="channel name" /><input className="h-10 min-w-0 border border-[#394345] bg-[#111719] px-2.5 text-xs text-[#e7ebe7] outline-none placeholder:text-[#566563] focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" aria-label={`Sensor ${index + 1} unit`} value={sensor.unit} onChange={(event) => updateSensor(index, 'unit', event.target.value)} placeholder="unit" /><Tooltip.Root><Tooltip.Trigger asChild><button className="grid size-6 place-items-center border-0 bg-transparent text-[#82918e] transition hover:text-[#dc755d] disabled:cursor-not-allowed disabled:opacity-30" type="button" onClick={() => removeSensor(index)} disabled={sensors.length === 1} aria-label={`Remove sensor ${index + 1}`}><X className="size-4" /></button></Tooltip.Trigger><Tooltip.Portal><Tooltip.Content className="rounded bg-[#e7ebe7] px-2 py-1 font-mono text-[10px] text-[#101416]" sideOffset={5}>Remove sensor<Tooltip.Arrow className="fill-[#e7ebe7]" /></Tooltip.Content></Tooltip.Portal></Tooltip.Root></div>)}</div><button className="mx-5 mt-7 flex h-12 w-[calc(100%-2.5rem)] items-center justify-center border-0 bg-[#dc755d] font-mono text-xs font-bold text-[#101416] transition hover:-translate-y-0.5 hover:bg-[#e98972] disabled:cursor-wait disabled:opacity-60 sm:mx-7 sm:w-[calc(100%-3.5rem)]" type="submit" disabled={submitting}>{submitting ? 'Saving device...' : 'Register device →'}</button><p className="mx-5 mt-3 text-[11px] text-[#82918e] sm:mx-7">Saved to the active project in PostgreSQL. Authentication will be added in a later phase.</p></form></section>
+}
+
+void LegacyDevicesView
 
 export default App
