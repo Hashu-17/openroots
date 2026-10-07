@@ -35,4 +35,9 @@ Access is project-based. A device belongs to a project, and a user's access to t
 
 ## Current implementation status
 
-Authentication is not implemented yet. `SecurityConfig` currently uses `permitAll()`, so the endpoint rules in this document are the target behavior, not the current behavior.
+Authentication is implemented with short-lived JWT bearer tokens for human users.
+Registration and login are available under `/api/v1/auth`; all other API routes
+require authentication and project membership. Device credentials are stored as
+BCrypt hashes and can be created, rotated, or revoked by project owners and
+administrators. The plaintext secret is returned only when it is created or
+rotated.
