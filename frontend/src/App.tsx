@@ -33,6 +33,7 @@ type Device = {
 type SensorDraft = { channelName: string; unit: string }
 type TelemetryRecord = { id: string; deviceId: string; capturedAt: string; payload: Record<string, unknown> }
 type ApiResponse<T> = { success: boolean; message: string; data: T }
+type AuthResponse = { accessToken: string; tokenType: string; expiresInSeconds: number }
 type View = 'projects' | 'project'
 type ProjectTab = 'overview' | 'devices' | 'members' | 'settings'
 
@@ -43,7 +44,18 @@ const starterSensors: SensorDraft[] = [
 ]
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options })
+  const token = window.localStorage.getItem('openroots.accessToken')
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options?.headers,
+    },
+  })
+  if (response.status === 401) {
+    window.dispatchEvent(new Event('openroots.sessionExpired'))
+  }
   const rawBody = await response.text()
   let body: ApiResponse<T> | undefined
   try {
@@ -63,6 +75,7 @@ function formatDate(value: string) {
 }
 
 function App() {
+  const [accessToken, setAccessToken] = useState(() => window.localStorage.getItem('openroots.accessToken'))
   const [projects, setProjects] = useState<Project[]>([])
   const [devices, setDevices] = useState<Device[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
@@ -81,6 +94,14 @@ function App() {
   const [telemetryError, setTelemetryError] = useState('')
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId)
+
+  function signOut() {
+    window.localStorage.removeItem('openroots.accessToken')
+    setAccessToken(null)
+    setProjects([])
+    setDevices([])
+    setView('projects')
+  }
 
   async function loadProjects() {
     try {
@@ -113,7 +134,19 @@ function App() {
     }
   }
 
-  useEffect(() => { void loadProjects() }, [])
+  useEffect(() => {
+    if (accessToken) void loadProjects()
+  }, [accessToken])
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      window.localStorage.removeItem('openroots.accessToken')
+      setAccessToken(null)
+      setError('Your session has expired. Please sign in again.')
+    }
+    window.addEventListener('openroots.sessionExpired', handleSessionExpired)
+    return () => window.removeEventListener('openroots.sessionExpired', handleSessionExpired)
+  }, [])
 
   useEffect(() => {
     if (view !== 'project' || !selectedProjectId) return
@@ -191,6 +224,13 @@ function App() {
     { id: 'settings', label: 'Settings', icon: Settings2, available: false },
   ]
 
+  if (!accessToken) {
+    return <AuthPanel onAuthenticated={(token) => {
+      window.localStorage.setItem('openroots.accessToken', token)
+      setAccessToken(token)
+    }} />
+  }
+
   return (
     <Tooltip.Provider delayDuration={300}>
       <div className="min-h-screen bg-[#101416] text-[#e7ebe7]">
@@ -200,7 +240,7 @@ function App() {
               <span className="grid size-9 place-items-center bg-[#e6b85a] font-mono text-xs font-extrabold text-[#101416]">OR</span>
               <span><span className="block font-mono text-[10px] font-bold uppercase tracking-[.14em] text-[#7f908e]">OpenRoots / Control</span><span className="font-display text-lg font-bold text-[#f1f3ed] transition group-hover:text-[#e6b85a]">Operations</span></span>
             </button>
-            <div className="flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[.1em] text-[#7f908e]"><span className="size-2 rounded-full bg-[#41c7a1] shadow-[0_0_0_4px_rgba(65,199,161,.12)]" /><span className="hidden sm:inline">Development workspace</span></div>
+            <div className="flex items-center gap-3 font-mono text-[10px] font-semibold uppercase tracking-[.1em] text-[#7f908e]"><span className="size-2 rounded-full bg-[#41c7a1] shadow-[0_0_0_4px_rgba(65,199,161,.12)]" /><span className="hidden sm:inline">Authenticated workspace</span><button className="border border-[#394345] px-2 py-1 text-[#b5c1be] transition hover:border-[#e6b85a] hover:text-[#e6b85a]" onClick={signOut} type="button">Sign out</button></div>
           </div>
         </header>
 
@@ -221,15 +261,75 @@ function App() {
               <nav className="mb-7 flex gap-1 overflow-x-auto border-b border-[#2a3335]">{projectTabs.map(({ id, label, icon: Icon, available }) => <button className={`inline-flex shrink-0 items-center gap-2 border-b-2 px-3 pb-3 font-mono text-[10px] font-bold uppercase tracking-[.1em] transition ${tab === id ? 'border-[#41c7a1] text-[#e7ebe7]' : 'border-transparent text-[#6f817f] hover:text-[#b5c1be]'} ${!available ? 'cursor-not-allowed opacity-40' : ''}`} disabled={!available} key={id} onClick={() => setTab(id)} type="button"><Icon className="size-3.5" />{label}{!available && <span className="text-[8px]">Soon</span>}</button>)}</nav>
               {error && <div className="mb-5 border-l-4 border-[#dc755d] bg-[#321f1d] px-4 py-3 text-sm text-[#f1b0a0]" role="alert">{error}</div>}
               {tab === 'overview' && <section className="grid gap-4 md:grid-cols-3"><div className="border border-[#2b3537] bg-[#171e20] p-6"><p className="font-mono text-[10px] uppercase tracking-[.12em] text-[#6f817f]">Registered devices</p><strong className="mt-5 block font-display text-5xl text-[#f1f3ed]">{devices.length}</strong><span className="mt-2 block text-sm text-[#82918e]">Hardware in this project</span></div><div className="border border-[#2b3537] bg-[#171e20] p-6"><p className="font-mono text-[10px] uppercase tracking-[.12em] text-[#6f817f]">Sensor channels</p><strong className="mt-5 block font-display text-5xl text-[#e6b85a]">{devices.reduce((total, device) => total + device.sensors.length, 0)}</strong><span className="mt-2 block text-sm text-[#82918e]">Ready for telemetry</span></div><div className="border border-[#2b3537] bg-[#171e20] p-6"><p className="font-mono text-[10px] uppercase tracking-[.12em] text-[#6f817f]">Members</p><strong className="mt-5 block font-display text-5xl text-[#82918e]">—</strong><span className="mt-2 block text-sm text-[#82918e]">Member management is coming later</span></div></section>}
-              {tab === 'members' && <Unavailable title="Member management is not enabled yet" description="Authentication and project roles are the next backend boundary." icon={<Users className="size-6" />} />}
+              {tab === 'members' && <Unavailable title="Member management is not enabled yet" description="Project member management will arrive in the next management slice." icon={<Users className="size-6" />} />}
               {tab === 'settings' && <Unavailable title="Project settings are not enabled yet" description="Project creation and configuration will arrive with the next management slice." icon={<Settings2 className="size-6" />} />}
               {tab === 'devices' && <><DevicesView devices={devices} loading={loading} error={error} notice={notice} deviceName={deviceName} deviceType={deviceType} sensors={sensors} submitting={submitting} onSubmit={registerDevice} onShowTelemetry={showTelemetry} onDelete={deleteDevice} setDeviceName={setDeviceName} setDeviceType={setDeviceType} setSensors={setSensors} updateSensor={updateSensor} removeSensor={(index) => setSensors((current) => current.filter((_, sensorIndex) => sensorIndex !== index))} />{telemetryDevice && <TelemetryPanel deviceName={telemetryDevice.name} records={telemetry} loading={telemetryLoading} error={telemetryError} onClose={() => setTelemetryDevice(null)} />}</>}
             </>
           )}
         </main>
-        <footer className="border-t border-[#2a3335] bg-[#141a1c]"><div className="mx-auto flex max-w-[1280px] flex-col gap-1 px-6 py-5 font-mono text-[10px] text-[#667674] sm:flex-row sm:items-center sm:justify-between sm:px-10"><span>OpenRoots local control surface</span><span>API /api/v1 · Persistence online</span></div></footer>
+        <footer className="border-t border-[#2a3335] bg-[#141a1c]"><div className="mx-auto flex max-w-[1280px] flex-col gap-1 px-6 py-5 font-mono text-[10px] text-[#667674] sm:flex-row sm:items-center sm:justify-between sm:px-10"><span>OpenRoots local control surface</span><span>API /api/v1 · JWT session active</span></div></footer>
       </div>
     </Tooltip.Provider>
+  )
+}
+
+function AuthPanel({ onAuthenticated }: { onAuthenticated: (token: string) => void }) {
+  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError('')
+    setNotice('')
+    setSubmitting(true)
+    try {
+      if (mode === 'register') {
+        await request<void>('/api/v1/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+        })
+        setMode('login')
+        setNotice('Account created. Sign in to open your workspace.')
+        return
+      }
+      const result = await request<AuthResponse>('/api/v1/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      })
+      onAuthenticated(result.accessToken)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to authenticate.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-[#101416] px-6 py-10 text-[#e7ebe7] sm:px-10">
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-[1280px] items-center justify-center">
+        <section className="w-full max-w-md border border-[#2b3537] bg-[#171e20] p-7 shadow-2xl sm:p-10">
+          <div className="mb-8 flex items-center gap-3">
+            <span className="grid size-9 place-items-center bg-[#e6b85a] font-mono text-xs font-extrabold text-[#101416]">OR</span>
+            <div><p className="font-mono text-[10px] font-bold uppercase tracking-[.14em] text-[#7f908e]">OpenRoots / Control</p><h1 className="font-display text-2xl font-bold text-[#f1f3ed]">Operations</h1></div>
+          </div>
+          <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[.16em] text-[#6f817f]">{mode === 'login' ? 'Secure sign in' : 'Create account'}</p>
+          <h2 className="font-display text-4xl font-bold text-[#f1f3ed]">{mode === 'login' ? 'Welcome back' : 'Join the workspace'}</h2>
+          <p className="mt-3 text-sm text-[#82918e]">{mode === 'login' ? 'Authenticate to access your projects and devices.' : 'Create a human user account for the control surface.'}</p>
+          {error && <div className="mt-5 border-l-4 border-[#dc755d] bg-[#321f1d] px-4 py-3 text-sm text-[#f1b0a0]" role="alert">{error}</div>}
+          {notice && <div className="mt-5 border-l-4 border-[#41c7a1] bg-[#172825] px-4 py-3 text-sm text-[#a7dfcd]" role="status">{notice}</div>}
+          <form className="mt-7 space-y-4" onSubmit={submit}>
+            <label className="block"><span className="mb-2 block font-mono text-[10px] font-bold uppercase tracking-[.1em] text-[#82918e]">Email</span><input className="h-11 w-full border border-[#394345] bg-[#101416] px-3 text-sm outline-none focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+            <label className="block"><span className="mb-2 block font-mono text-[10px] font-bold uppercase tracking-[.1em] text-[#82918e]">Password</span><input className="h-11 w-full border border-[#394345] bg-[#101416] px-3 text-sm outline-none focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" minLength={mode === 'register' ? 8 : undefined} type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+            <button className="inline-flex h-11 w-full items-center justify-center bg-[#41c7a1] px-4 font-mono text-xs font-bold uppercase tracking-[.1em] text-[#101416] transition hover:bg-[#65d5b4] disabled:cursor-not-allowed disabled:opacity-50" disabled={submitting} type="submit">{submitting ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}</button>
+          </form>
+          <button className="mt-5 w-full text-center font-mono text-[10px] font-bold uppercase tracking-[.1em] text-[#82918e] hover:text-[#e6b85a]" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setNotice('') }} type="button">{mode === 'login' ? 'Need an account? Register' : 'Already have an account? Sign in'}</button>
+        </section>
+      </div>
+    </div>
   )
 }
 
@@ -243,7 +343,7 @@ function DeleteDevicePanel({ devices, onDelete }: { devices: Device[]; onDelete:
 }
 
 function LegacyDevicesView({ devices, loading, error, notice, deviceName, deviceType, sensors, submitting, onSubmit, setDeviceName, setDeviceType, setSensors, updateSensor, removeSensor }: { devices: Device[]; loading: boolean; error: string; notice: string; deviceName: string; deviceType: string; sensors: SensorDraft[]; submitting: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void; setDeviceName: (value: string) => void; setDeviceType: (value: string) => void; setSensors: React.Dispatch<React.SetStateAction<SensorDraft[]>>; updateSensor: (index: number, field: keyof SensorDraft, value: string) => void; removeSensor: (index: number) => void }) {
-  return <section className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,.85fr)]"><div className="min-h-[480px] border border-[#2b3537] bg-[#171e20]"><div className="flex items-center justify-between border-b border-[#2b3537] px-5 py-5 sm:px-7"><div><p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#6f817f]">Hardware inventory</p><h2 className="font-display text-xl font-bold text-[#f1f3ed]">Devices</h2></div><span className="bg-[#263234] px-2 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[.08em] text-[#82918e]">{devices.length.toString().padStart(2, '0')} total</span></div>{error && <div className="m-5 border-l-4 border-[#dc755d] bg-[#321f1d] px-4 py-3 text-sm text-[#f1b0a0]">{error}</div>}{notice && <div className="m-5 border-l-4 border-[#41c7a1] bg-[#172825] px-4 py-3 text-sm text-[#91ddc4]">{notice}</div>}{loading ? <div className="flex min-h-80 items-center justify-center gap-3 text-sm text-[#82918e]"><LoaderCircle className="size-5 animate-spin text-[#41c7a1]" />Loading devices...</div> : devices.length === 0 ? <div className="flex min-h-80 flex-col items-center justify-center gap-2 px-7 text-center text-sm text-[#82918e]"><Radio className="mb-2 size-10 text-[#6f817f]" /><strong className="font-display text-lg text-[#e7ebe7]">No devices registered</strong><span>Add the first physical device from the form.</span></div> : <div>{devices.map((device) => <article className="grid grid-cols-[36px_1fr_auto] items-start gap-3.5 border-b border-[#2b3537] px-5 py-5 last:border-b-0 sm:px-7" key={device.id}><div className="grid size-9 place-items-center bg-[#202a2c] text-[#e6b85a]"><Radio className="size-4" /></div><div><div className="flex flex-wrap items-center gap-2"><strong className="font-display text-base font-bold text-[#f1f3ed]">{device.name}</strong><span className="bg-[#172825] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-[#41c7a1]">{device.status}</span></div><span className="font-mono text-[11px] text-[#82918e]">{device.type}</span><div className="mt-3"><span className="font-mono text-[9px] font-bold uppercase tracking-[.08em] text-[#6f817f]">Device UUID</span><code className="mt-1 block break-all font-mono text-[11px] text-[#e6b85a] select-all">{device.id}</code></div><div className="mt-3 flex flex-wrap gap-1.5">{device.sensors.map((sensor) => <span className="inline-flex items-baseline gap-1.5 bg-[#263234] px-2 py-1.5 font-mono text-[11px] font-semibold text-[#dbe2de]" key={sensor.id}>{sensor.channelName}<small className="text-[9px] font-normal text-[#82918e]">{sensor.unit ?? 'unitless'}</small></span>)}</div></div><time className="font-mono text-[10px] text-[#6f817f]" dateTime={device.registeredAt}>{formatDate(device.registeredAt)}</time></article>)}</div>}</div><form className="border border-[#2b3537] bg-[#171e20] pb-7" onSubmit={onSubmit}><div className="mb-7 border-b border-[#2b3537] px-5 py-5 sm:px-7"><p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#6f817f]">Add hardware</p><h2 className="font-display text-xl font-bold text-[#f1f3ed]">Register a device</h2></div><div className="grid gap-3.5 px-5 sm:grid-cols-2 sm:px-7">{([['Device name', deviceName, setDeviceName, 'e.g. North greenhouse'], ['Device type', deviceType, setDeviceType, 'e.g. weather-station']] as const).map(([label, value, setter, placeholder]) => <label className="grid gap-2 font-mono text-[10px] font-bold uppercase tracking-[.08em] text-[#82918e]" key={label}><span>{label}</span><input className="h-11 w-full border border-[#394345] bg-[#111719] px-3 text-sm font-normal normal-case tracking-normal text-[#e7ebe7] outline-none placeholder:text-[#566563] focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" value={value} onChange={(event) => setter(event.target.value)} placeholder={placeholder} /></label>)}</div><div className="mx-5 my-7 flex items-start justify-between gap-3 sm:mx-7"><div><span className="font-mono text-[11px] font-bold uppercase tracking-[.08em] text-[#e7ebe7]">Sensors</span><small className="mt-1.5 block text-xs text-[#82918e]">Define the channels this device exposes.</small></div><button className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 font-mono text-[11px] font-bold text-[#e6b85a] transition hover:text-[#f1f3ed]" type="button" onClick={() => setSensors((current) => [...current, { channelName: '', unit: '' }])}><CirclePlus className="size-4" />Add sensor</button></div><div className="grid gap-2 px-5 sm:px-7">{sensors.map((sensor, index) => <div className="grid grid-cols-[25px_1fr_75px_25px] items-center gap-1.5" key={`${index}-${sensor.channelName}`}><span className="font-mono text-[10px] text-[#6f817f]">{String(index + 1).padStart(2, '0')}</span><input className="h-10 min-w-0 border border-[#394345] bg-[#111719] px-2.5 text-xs text-[#e7ebe7] outline-none placeholder:text-[#566563] focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" aria-label={`Sensor ${index + 1} channel`} value={sensor.channelName} onChange={(event) => updateSensor(index, 'channelName', event.target.value)} placeholder="channel name" /><input className="h-10 min-w-0 border border-[#394345] bg-[#111719] px-2.5 text-xs text-[#e7ebe7] outline-none placeholder:text-[#566563] focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" aria-label={`Sensor ${index + 1} unit`} value={sensor.unit} onChange={(event) => updateSensor(index, 'unit', event.target.value)} placeholder="unit" /><Tooltip.Root><Tooltip.Trigger asChild><button className="grid size-6 place-items-center border-0 bg-transparent text-[#82918e] transition hover:text-[#dc755d] disabled:cursor-not-allowed disabled:opacity-30" type="button" onClick={() => removeSensor(index)} disabled={sensors.length === 1} aria-label={`Remove sensor ${index + 1}`}><X className="size-4" /></button></Tooltip.Trigger><Tooltip.Portal><Tooltip.Content className="rounded bg-[#e7ebe7] px-2 py-1 font-mono text-[10px] text-[#101416]" sideOffset={5}>Remove sensor<Tooltip.Arrow className="fill-[#e7ebe7]" /></Tooltip.Content></Tooltip.Portal></Tooltip.Root></div>)}</div><button className="mx-5 mt-7 flex h-12 w-[calc(100%-2.5rem)] items-center justify-center border-0 bg-[#dc755d] font-mono text-xs font-bold text-[#101416] transition hover:-translate-y-0.5 hover:bg-[#e98972] disabled:cursor-wait disabled:opacity-60 sm:mx-7 sm:w-[calc(100%-3.5rem)]" type="submit" disabled={submitting}>{submitting ? 'Saving device...' : 'Register device →'}</button><p className="mx-5 mt-3 text-[11px] text-[#82918e] sm:mx-7">Saved to the active project in PostgreSQL. Authentication will be added in a later phase.</p></form></section>
+  return <section className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,.85fr)]"><div className="min-h-[480px] border border-[#2b3537] bg-[#171e20]"><div className="flex items-center justify-between border-b border-[#2b3537] px-5 py-5 sm:px-7"><div><p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#6f817f]">Hardware inventory</p><h2 className="font-display text-xl font-bold text-[#f1f3ed]">Devices</h2></div><span className="bg-[#263234] px-2 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[.08em] text-[#82918e]">{devices.length.toString().padStart(2, '0')} total</span></div>{error && <div className="m-5 border-l-4 border-[#dc755d] bg-[#321f1d] px-4 py-3 text-sm text-[#f1b0a0]">{error}</div>}{notice && <div className="m-5 border-l-4 border-[#41c7a1] bg-[#172825] px-4 py-3 text-sm text-[#91ddc4]">{notice}</div>}{loading ? <div className="flex min-h-80 items-center justify-center gap-3 text-sm text-[#82918e]"><LoaderCircle className="size-5 animate-spin text-[#41c7a1]" />Loading devices...</div> : devices.length === 0 ? <div className="flex min-h-80 flex-col items-center justify-center gap-2 px-7 text-center text-sm text-[#82918e]"><Radio className="mb-2 size-10 text-[#6f817f]" /><strong className="font-display text-lg text-[#e7ebe7]">No devices registered</strong><span>Add the first physical device from the form.</span></div> : <div>{devices.map((device) => <article className="grid grid-cols-[36px_1fr_auto] items-start gap-3.5 border-b border-[#2b3537] px-5 py-5 last:border-b-0 sm:px-7" key={device.id}><div className="grid size-9 place-items-center bg-[#202a2c] text-[#e6b85a]"><Radio className="size-4" /></div><div><div className="flex flex-wrap items-center gap-2"><strong className="font-display text-base font-bold text-[#f1f3ed]">{device.name}</strong><span className="bg-[#172825] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-[#41c7a1]">{device.status}</span></div><span className="font-mono text-[11px] text-[#82918e]">{device.type}</span><div className="mt-3"><span className="font-mono text-[9px] font-bold uppercase tracking-[.08em] text-[#6f817f]">Device UUID</span><code className="mt-1 block break-all font-mono text-[11px] text-[#e6b85a] select-all">{device.id}</code></div><div className="mt-3 flex flex-wrap gap-1.5">{device.sensors.map((sensor) => <span className="inline-flex items-baseline gap-1.5 bg-[#263234] px-2 py-1.5 font-mono text-[11px] font-semibold text-[#dbe2de]" key={sensor.id}>{sensor.channelName}<small className="text-[9px] font-normal text-[#82918e]">{sensor.unit ?? 'unitless'}</small></span>)}</div></div><time className="font-mono text-[10px] text-[#6f817f]" dateTime={device.registeredAt}>{formatDate(device.registeredAt)}</time></article>)}</div>}</div><form className="border border-[#2b3537] bg-[#171e20] pb-7" onSubmit={onSubmit}><div className="mb-7 border-b border-[#2b3537] px-5 py-5 sm:px-7"><p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#6f817f]">Add hardware</p><h2 className="font-display text-xl font-bold text-[#f1f3ed]">Register a device</h2></div><div className="grid gap-3.5 px-5 sm:grid-cols-2 sm:px-7">{([['Device name', deviceName, setDeviceName, 'e.g. North greenhouse'], ['Device type', deviceType, setDeviceType, 'e.g. weather-station']] as const).map(([label, value, setter, placeholder]) => <label className="grid gap-2 font-mono text-[10px] font-bold uppercase tracking-[.08em] text-[#82918e]" key={label}><span>{label}</span><input className="h-11 w-full border border-[#394345] bg-[#111719] px-3 text-sm font-normal normal-case tracking-normal text-[#e7ebe7] outline-none placeholder:text-[#566563] focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" value={value} onChange={(event) => setter(event.target.value)} placeholder={placeholder} /></label>)}</div><div className="mx-5 my-7 flex items-start justify-between gap-3 sm:mx-7"><div><span className="font-mono text-[11px] font-bold uppercase tracking-[.08em] text-[#e7ebe7]">Sensors</span><small className="mt-1.5 block text-xs text-[#82918e]">Define the channels this device exposes.</small></div><button className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 font-mono text-[11px] font-bold text-[#e6b85a] transition hover:text-[#f1f3ed]" type="button" onClick={() => setSensors((current) => [...current, { channelName: '', unit: '' }])}><CirclePlus className="size-4" />Add sensor</button></div><div className="grid gap-2 px-5 sm:px-7">{sensors.map((sensor, index) => <div className="grid grid-cols-[25px_1fr_75px_25px] items-center gap-1.5" key={`${index}-${sensor.channelName}`}><span className="font-mono text-[10px] text-[#6f817f]">{String(index + 1).padStart(2, '0')}</span><input className="h-10 min-w-0 border border-[#394345] bg-[#111719] px-2.5 text-xs text-[#e7ebe7] outline-none placeholder:text-[#566563] focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" aria-label={`Sensor ${index + 1} channel`} value={sensor.channelName} onChange={(event) => updateSensor(index, 'channelName', event.target.value)} placeholder="channel name" /><input className="h-10 min-w-0 border border-[#394345] bg-[#111719] px-2.5 text-xs text-[#e7ebe7] outline-none placeholder:text-[#566563] focus:border-[#41c7a1] focus:ring-4 focus:ring-[#41c7a1]/10" aria-label={`Sensor ${index + 1} unit`} value={sensor.unit} onChange={(event) => updateSensor(index, 'unit', event.target.value)} placeholder="unit" /><Tooltip.Root><Tooltip.Trigger asChild><button className="grid size-6 place-items-center border-0 bg-transparent text-[#82918e] transition hover:text-[#dc755d] disabled:cursor-not-allowed disabled:opacity-30" type="button" onClick={() => removeSensor(index)} disabled={sensors.length === 1} aria-label={`Remove sensor ${index + 1}`}><X className="size-4" /></button></Tooltip.Trigger><Tooltip.Portal><Tooltip.Content className="rounded bg-[#e7ebe7] px-2 py-1 font-mono text-[10px] text-[#101416]" sideOffset={5}>Remove sensor<Tooltip.Arrow className="fill-[#e7ebe7]" /></Tooltip.Content></Tooltip.Portal></Tooltip.Root></div>)}</div><button className="mx-5 mt-7 flex h-12 w-[calc(100%-2.5rem)] items-center justify-center border-0 bg-[#dc755d] font-mono text-xs font-bold text-[#101416] transition hover:-translate-y-0.5 hover:bg-[#e98972] disabled:cursor-wait disabled:opacity-60 sm:mx-7 sm:w-[calc(100%-3.5rem)]" type="submit" disabled={submitting}>{submitting ? 'Saving device...' : 'Register device →'}</button>  <p className="mx-5 mt-3 text-[11px] text-[#82918e] sm:mx-7">Saved to the active project in PostgreSQL. Requires an owner or administrator role.</p></form></section>
 }
 
 void DeleteDevicePanel

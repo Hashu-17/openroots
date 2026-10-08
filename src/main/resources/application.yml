@@ -34,3 +34,8 @@ management:
     health:
       probes:
         enabled: true
+
+openroots:
+  jwt:
+    secret: ${OPENROOTS_JWT_SECRET:b3BlbnJvb3RzLWRldmVsb3BtZW50LWp3dC1zZWNyZXQtdGhpcnR5LXR3by1ieXRlcw==}
+    expiration: ${OPENROOTS_JWT_EXPIRATION:PT15M}
