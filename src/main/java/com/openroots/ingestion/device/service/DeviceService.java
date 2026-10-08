@@ -46,12 +46,6 @@ public class DeviceService {
             throw new IllegalArgumentException("Sensor channel names must be unique within a device");
         }
 
-        @Transactional
-        public DeviceEntity register(String email, UUID projectId, DeviceCreateRequest request) {
-            authorizationService.requireManage(email, projectId);
-            return register(projectId, request);
-        }
-
         DeviceEntity device = new DeviceEntity(project, request.name().trim(), request.type().trim());
         for (SensorCreateRequest sensor : request.sensors()) {
             String unit = sensor.unit() == null || sensor.unit().isBlank() ? null : sensor.unit().trim();
@@ -59,6 +53,12 @@ public class DeviceService {
         }
 
         return deviceRepository.save(device);
+    }
+
+    @Transactional
+    public DeviceEntity register(String email, UUID projectId, DeviceCreateRequest request) {
+        authorizationService.requireManage(email, projectId);
+        return register(projectId, request);
     }
 
     @Transactional
