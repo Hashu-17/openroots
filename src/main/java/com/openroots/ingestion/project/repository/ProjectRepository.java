@@ -1,0 +1,14 @@
+package com.openroots.ingestion.project.repository;
+
+import com.openroots.ingestion.project.model.ProjectEntity;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ProjectRepository extends JpaRepository<ProjectEntity, UUID> {
+
+    List<ProjectEntity> findAllByOrderByCreatedAtDesc();
+
+    Optional<ProjectEntity> findByName(String name);
+}
