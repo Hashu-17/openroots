@@ -16,6 +16,22 @@ services:
       timeout: 5s
       retries: 12
 
+  mosquitto:
+    image: eclipse-mosquitto:2.1.2
+    container_name: openroots-mosquitto
+    profiles: ["mqtt"]
+    environment:
+      MQTT_DEV_DEVICE_ID: ${MQTT_DEV_DEVICE_ID:-}
+      MQTT_DEV_DEVICE_PASSWORD: ${MQTT_DEV_DEVICE_PASSWORD:-}
+      MQTT_INGESTOR_PASSWORD: ${MQTT_INGESTOR_PASSWORD:-}
+    command: ["/bin/sh", "/mosquitto/config/start-broker.sh"]
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - mosquitto_data:/mosquitto/data
+    ports:
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+    restart: unless-stopped
+
   backend:
     build:
       context: .
@@ -44,3 +60,4 @@ services:
 
 volumes:
   postgres_data:
+  mosquitto_data:
