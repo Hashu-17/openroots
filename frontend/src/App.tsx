@@ -83,7 +83,7 @@ function App() {
   const selectedProject = projects.find((project) => project.id === selectedProjectId)
 
   async function loadProjects() {
-    try {
+     try {
       const nextProjects = await request<Project[]>('/api/v1/projects')
       setProjects(nextProjects.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)))
       setSelectedProjectId((current) => current || nextProjects[0]?.id || '')
