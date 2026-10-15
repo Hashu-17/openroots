@@ -102,7 +102,11 @@ paths:
               $ref: '#/components/schemas/DeviceCreateRequest'
       responses:
         '201':
-          description: Device registered
+          description: Device registered; MQTT credentials are returned once when broker provisioning is enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceRegistrationApiResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -272,6 +276,37 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SensorResponse'
+    DeviceRegistrationResponse:
+      type: object
+      required: [device]
+      properties:
+        device:
+          $ref: '#/components/schemas/DeviceResponse'
+        mqttCredentials:
+          nullable: true
+          description: Present only on successful registration when MQTT provisioning is enabled. The password is shown once.
+            type: object
+            required: [username, password, publishTopic]
+            properties:
+            username:
+              type: string
+            password:
+              type: string
+            publishTopic:
+              type: string
+    DeviceRegistrationApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/DeviceRegistrationResponse'
+        timestamp:
+          type: string
+          format: date-time
     TelemetryIngestRequest:
       type: object
       required: [deviceId, capturedAt, payload]

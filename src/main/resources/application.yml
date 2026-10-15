@@ -25,6 +25,15 @@ spring:
 server:
   port: 8080
 
+openroots:
+  mqtt:
+    provisioning-enabled: ${OPENROOTS_MQTT_PROVISIONING_ENABLED:false}
+    broker-host: ${OPENROOTS_MQTT_BROKER_HOST:localhost}
+    broker-port: ${OPENROOTS_MQTT_BROKER_PORT:1883}
+    admin-username: ${OPENROOTS_MQTT_ADMIN_USERNAME:}
+    admin-password: ${OPENROOTS_MQTT_ADMIN_PASSWORD:}
+    response-timeout-seconds: 5
+
 management:
   endpoints:
     web:

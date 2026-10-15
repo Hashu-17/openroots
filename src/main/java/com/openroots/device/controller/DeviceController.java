@@ -15,28 +15,39 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.openroots.common.response.ApiResponse;
 import com.openroots.device.dto.DeviceCreateRequest;
+import com.openroots.device.dto.DeviceRegistrationResponse;
 import com.openroots.device.dto.DeviceResponse;
+import com.openroots.device.dto.MqttDeviceCredentials;
 import com.openroots.device.dto.SensorResponse;
 import com.openroots.device.model.DeviceEntity;
 import com.openroots.device.service.DeviceService;
+import com.openroots.device.service.MosquittoDeviceProvisioner;
+import jakarta.transaction.Transactional;
 
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/devices")
 public class DeviceController {
 
     private final DeviceService deviceService;
+    private final MosquittoDeviceProvisioner mqttProvisioner;
 
-    public DeviceController(DeviceService deviceService) {
+    public DeviceController(DeviceService deviceService, MosquittoDeviceProvisioner mqttProvisioner) {
         this.deviceService = deviceService;
+        this.mqttProvisioner = mqttProvisioner;
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<DeviceResponse>> registerDevice(
+    @Transactional
+    public ResponseEntity<ApiResponse<DeviceRegistrationResponse>> registerDevice(
             @PathVariable UUID projectId,
             @Valid @RequestBody DeviceCreateRequest request) {
         DeviceEntity device = deviceService.register(projectId, request);
+        MqttDeviceCredentials credentials = mqttProvisioner.isEnabled()
+                ? mqttProvisioner.provision(device.getId())
+                : null;
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Device registered", toResponse(device)));
+                .body(ApiResponse.success("Device registered", new DeviceRegistrationResponse(
+                        toResponse(device), credentials)));
     }
 
     @GetMapping
@@ -54,10 +65,15 @@ public class DeviceController {
     }
 
     @DeleteMapping("/{deviceId}")
+    @Transactional
     public ApiResponse<Void> deleteDevice(
             @PathVariable UUID projectId,
             @PathVariable UUID deviceId) {
-        deviceService.delete(projectId, deviceId);
+        DeviceEntity device = deviceService.findById(projectId, deviceId);
+        if (mqttProvisioner.isEnabled()) {
+            mqttProvisioner.revoke(device.getId());
+        }
+        deviceService.delete(projectId, device.getId());
         return ApiResponse.success("Device deleted", null);
     }
 

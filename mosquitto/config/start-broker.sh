@@ -1,34 +1,76 @@
 #!/bin/sh
 set -eu
 
-: "${MQTT_DEV_DEVICE_ID:?Set MQTT_DEV_DEVICE_ID to a registered device UUID}"
-: "${MQTT_DEV_DEVICE_PASSWORD:?Set MQTT_DEV_DEVICE_PASSWORD}"
+: "${MQTT_ADMIN_USERNAME:?Set MQTT_ADMIN_USERNAME}"
+: "${MQTT_ADMIN_PASSWORD:?Set MQTT_ADMIN_PASSWORD}"
+: "${MQTT_INGESTOR_USERNAME:?Set MQTT_INGESTOR_USERNAME}"
 : "${MQTT_INGESTOR_PASSWORD:?Set MQTT_INGESTOR_PASSWORD}"
 
-if ! printf '%s' "$MQTT_DEV_DEVICE_ID" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
-  echo "MQTT_DEV_DEVICE_ID must be a lowercase UUID" >&2
+DYNSEC_FILE=/mosquitto/data/dynamic-security.json
+BROKER_PID=
+
+if [ ! -f "$DYNSEC_FILE" ]; then
+  mosquitto_ctrl dynsec init "$DYNSEC_FILE" "$MQTT_ADMIN_USERNAME" "$MQTT_ADMIN_PASSWORD"
+  chmod 600 "$DYNSEC_FILE"
+fi
+
+broker_control() {
+  mosquitto_ctrl -h 127.0.0.1 -p 1883 \
+    -u "$MQTT_ADMIN_USERNAME" -P "$MQTT_ADMIN_PASSWORD" dynsec "$@"
+}
+
+stop_bootstrap_broker() {
+  if [ -n "$BROKER_PID" ] && kill -0 "$BROKER_PID" 2>/dev/null; then
+    kill -TERM "$BROKER_PID"
+    wait "$BROKER_PID" || true
+  fi
+}
+
+trap stop_bootstrap_broker EXIT INT TERM
+/usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf &
+BROKER_PID=$!
+
+ready=false
+for attempt in $(seq 1 30); do
+  if broker_control getDefaultACLAccess publishClientSend >/dev/null 2>&1; then
+    ready=true
+    break
+  fi
+  sleep 1
+done
+
+if [ "$ready" != true ]; then
+  echo "Mosquitto did not become ready for dynamic-security setup" >&2
   exit 1
 fi
 
-PASSWD_FILE=/mosquitto/data/passwd
-ACL_FILE=/mosquitto/data/aclfile
-DEVICE_USER=$MQTT_DEV_DEVICE_ID
+broker_control setDefaultACLAccess publishClientSend deny
+broker_control setDefaultACLAccess subscribe deny
+broker_control setDefaultACLAccess publishClientReceive deny
+broker_control setDefaultACLAccess unsubscribe allow
 
-umask 077
+if ! broker_control getRole device-publisher >/dev/null 2>&1; then
+  broker_control createRole device-publisher
+  broker_control addRoleACL device-publisher publishClientSend \
+    'openroots/v1/devices/%u/telemetry' allow 10
+fi
 
-# This dev-only setup passes credentials to mosquitto_passwd via argv.
-mosquitto_passwd -b -c "$PASSWD_FILE" "$DEVICE_USER" "$MQTT_DEV_DEVICE_PASSWORD"
-mosquitto_passwd -b "$PASSWD_FILE" telemetry-ingestor "$MQTT_INGESTOR_PASSWORD"
+if ! broker_control getRole telemetry-ingestor >/dev/null 2>&1; then
+  broker_control createRole telemetry-ingestor
+  broker_control addRoleACL telemetry-ingestor subscribePattern \
+    'openroots/v1/devices/+/telemetry' allow 10
+  broker_control addRoleACL telemetry-ingestor publishClientReceive \
+    'openroots/v1/devices/+/telemetry' allow 10
+fi
 
-printf '%s\n' \
-  "user $DEVICE_USER" \
-  "topic write openroots/v1/devices/$DEVICE_USER/telemetry" \
-  '' \
-  'user telemetry-ingestor' \
-  'topic read openroots/v1/devices/+/telemetry' > "$ACL_FILE"
+if broker_control getClient "$MQTT_INGESTOR_USERNAME" >/dev/null 2>&1; then
+  broker_control setClientPassword "$MQTT_INGESTOR_USERNAME" "$MQTT_INGESTOR_PASSWORD"
+else
+  broker_control createClient "$MQTT_INGESTOR_USERNAME" "$MQTT_INGESTOR_PASSWORD"
+  broker_control addClientRole "$MQTT_INGESTOR_USERNAME" telemetry-ingestor 10
+fi
 
-chown mosquitto:mosquitto "$PASSWD_FILE" "$ACL_FILE"
-chmod 600 "$PASSWD_FILE"
-chmod 640 "$ACL_FILE"
-
+stop_bootstrap_broker
+BROKER_PID=
+trap - EXIT INT TERM
 exec /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf

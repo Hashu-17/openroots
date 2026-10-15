@@ -30,6 +30,8 @@ type Device = {
   registeredAt: string
   sensors: Sensor[]
 }
+type MqttDeviceCredentials = { username: string; password: string; publishTopic: string }
+type DeviceRegistrationResponse = { device: Device; mqttCredentials: MqttDeviceCredentials | null }
 type SensorDraft = { channelName: string; unit: string }
 type TelemetryRecord = { id: string; deviceId: string; capturedAt: string; payload: Record<string, unknown> }
 type ApiResponse<T> = { success: boolean; message: string; data: T }
@@ -75,6 +77,7 @@ function App() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [newMqttCredentials, setNewMqttCredentials] = useState<MqttDeviceCredentials | null>(null)
   const [telemetryDevice, setTelemetryDevice] = useState<Device | null>(null)
   const [telemetry, setTelemetry] = useState<TelemetryRecord[]>([])
   const [telemetryLoading, setTelemetryLoading] = useState(false)
@@ -150,19 +153,23 @@ function App() {
     event.preventDefault()
     setError('')
     setNotice('')
+    setNewMqttCredentials(null)
     const names = sensors.map((sensor) => sensor.channelName.trim()).filter(Boolean)
     if (!selectedProjectId || !deviceName.trim() || !deviceType.trim() || names.length === 0) return setError('Enter a device name, type, and at least one sensor.')
     if (sensors.some((sensor) => !sensor.channelName.trim())) return setError('Every sensor needs a channel name.')
     if (new Set(names).size !== names.length) return setError('Sensor channel names must be unique.')
     setSubmitting(true)
     try {
-      await request<Device>(`/api/v1/projects/${selectedProjectId}/devices`, {
+      const registration = await request<DeviceRegistrationResponse>(`/api/v1/projects/${selectedProjectId}/devices`, {
         method: 'POST',
         body: JSON.stringify({ name: deviceName.trim(), type: deviceType.trim(), sensors: sensors.map((sensor) => ({ channelName: sensor.channelName.trim(), unit: sensor.unit.trim() || null })) }),
       })
+      setNewMqttCredentials(registration.mqttCredentials)
       await loadDevices(selectedProjectId)
       resetForm()
-      setNotice('Device registered and saved to PostgreSQL.')
+      setNotice(registration.mqttCredentials
+        ? 'Device registered. Copy its MQTT password now; it will not be shown again.'
+        : 'Device registered and saved to PostgreSQL.')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to register device.')
     } finally {
@@ -223,7 +230,7 @@ function App() {
               {tab === 'overview' && <section className="grid gap-4 md:grid-cols-3"><div className="border border-[#2b3537] bg-[#171e20] p-6"><p className="font-mono text-[10px] uppercase tracking-[.12em] text-[#6f817f]">Registered devices</p><strong className="mt-5 block font-display text-5xl text-[#f1f3ed]">{devices.length}</strong><span className="mt-2 block text-sm text-[#82918e]">Hardware in this project</span></div><div className="border border-[#2b3537] bg-[#171e20] p-6"><p className="font-mono text-[10px] uppercase tracking-[.12em] text-[#6f817f]">Sensor channels</p><strong className="mt-5 block font-display text-5xl text-[#e6b85a]">{devices.reduce((total, device) => total + device.sensors.length, 0)}</strong><span className="mt-2 block text-sm text-[#82918e]">Ready for telemetry</span></div><div className="border border-[#2b3537] bg-[#171e20] p-6"><p className="font-mono text-[10px] uppercase tracking-[.12em] text-[#6f817f]">Members</p><strong className="mt-5 block font-display text-5xl text-[#82918e]">—</strong><span className="mt-2 block text-sm text-[#82918e]">Member management is coming later</span></div></section>}
               {tab === 'members' && <Unavailable title="Member management is not enabled yet" description="Authentication and project roles are the next backend boundary." icon={<Users className="size-6" />} />}
               {tab === 'settings' && <Unavailable title="Project settings are not enabled yet" description="Project creation and configuration will arrive with the next management slice." icon={<Settings2 className="size-6" />} />}
-              {tab === 'devices' && <><DevicesView devices={devices} loading={loading} error={error} notice={notice} deviceName={deviceName} deviceType={deviceType} sensors={sensors} submitting={submitting} onSubmit={registerDevice} onShowTelemetry={showTelemetry} onDelete={deleteDevice} setDeviceName={setDeviceName} setDeviceType={setDeviceType} setSensors={setSensors} updateSensor={updateSensor} removeSensor={(index) => setSensors((current) => current.filter((_, sensorIndex) => sensorIndex !== index))} />{telemetryDevice && <TelemetryPanel deviceName={telemetryDevice.name} records={telemetry} loading={telemetryLoading} error={telemetryError} onClose={() => setTelemetryDevice(null)} />}</>}
+              {tab === 'devices' && <><DevicesView devices={devices} loading={loading} error={error} notice={notice} mqttCredentials={newMqttCredentials} onDismissMqttCredentials={() => setNewMqttCredentials(null)} deviceName={deviceName} deviceType={deviceType} sensors={sensors} submitting={submitting} onSubmit={registerDevice} onShowTelemetry={showTelemetry} onDelete={deleteDevice} setDeviceName={setDeviceName} setDeviceType={setDeviceType} setSensors={setSensors} updateSensor={updateSensor} removeSensor={(index) => setSensors((current) => current.filter((_, sensorIndex) => sensorIndex !== index))} />{telemetryDevice && <TelemetryPanel deviceName={telemetryDevice.name} records={telemetry} loading={telemetryLoading} error={telemetryError} onClose={() => setTelemetryDevice(null)} />}</>}
             </>
           )}
         </main>

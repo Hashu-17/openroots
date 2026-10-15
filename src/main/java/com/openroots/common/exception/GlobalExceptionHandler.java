@@ -2,6 +2,7 @@ package com.openroots.common.exception;
 
 import java.util.List;
 import java.util.stream.Collectors;
+import com.openroots.device.service.MqttProvisioningException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -23,6 +24,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleBadRequest(IllegalArgumentException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(exception.getMessage(), null));
+    }
+
+    @ExceptionHandler(MqttProvisioningException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMqttProvisioning(MqttProvisioningException exception) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(ApiResponse.error(exception.getMessage(), null));
     }
 
