@@ -33,6 +33,8 @@ openroots:
     admin-username: ${OPENROOTS_MQTT_ADMIN_USERNAME:}
     admin-password: ${OPENROOTS_MQTT_ADMIN_PASSWORD:}
     response-timeout-seconds: 5
+  ingestion:
+    registry-api-key: ${OPENROOTS_INGESTION_REGISTRY_API_KEY:}
 
 management:
   endpoints:

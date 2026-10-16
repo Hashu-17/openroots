@@ -6,8 +6,13 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 public interface DeviceRepository extends JpaRepository<DeviceEntity, UUID> {
+
+    @EntityGraph(attributePaths = "sensors")
+    @Query("select distinct device from DeviceEntity device")
+    List<DeviceEntity> findAllWithSensors();
 
     @EntityGraph(attributePaths = "sensors")
     List<DeviceEntity> findAllByProject_IdOrderByRegisteredAtDesc(UUID projectId);

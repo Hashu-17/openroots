@@ -52,6 +52,7 @@ services:
       OPENROOTS_MQTT_BROKER_PORT: 1883
       OPENROOTS_MQTT_ADMIN_USERNAME: ${MQTT_ADMIN_USERNAME:-openroots-admin}
       OPENROOTS_MQTT_ADMIN_PASSWORD: ${MQTT_ADMIN_PASSWORD:?Set MQTT_ADMIN_PASSWORD in .env}
+      OPENROOTS_INGESTION_REGISTRY_API_KEY: ${INGESTION_REGISTRY_API_KEY:?Set INGESTION_REGISTRY_API_KEY in .env}
     depends_on:
       database:
         condition: service_healthy
@@ -59,6 +60,31 @@ services:
         condition: service_healthy
     ports:
       - "${BACKEND_PORT:-8080}:8080"
+
+  ingestion:
+    build:
+      context: ./ingestion
+      dockerfile: Dockerfile
+    container_name: openroots-ingestion
+    environment:
+      MQTT_BROKER_URL: tcp://mosquitto:1883
+      MQTT_USERNAME: ${MQTT_INGESTOR_USERNAME:-telemetry-ingestor}
+      MQTT_PASSWORD: ${MQTT_INGESTOR_PASSWORD:?Set MQTT_INGESTOR_PASSWORD in .env}
+      DATABASE_HOST: database
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${POSTGRES_DB}
+      DATABASE_USER: ${POSTGRES_USER}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+      REGISTRY_URL: http://backend:8080/internal/v1/ingestion/device-registry
+      REGISTRY_API_KEY: ${INGESTION_REGISTRY_API_KEY:?Set INGESTION_REGISTRY_API_KEY in .env}
+    depends_on:
+      database:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: unless-stopped
 
   frontend:
     build:
