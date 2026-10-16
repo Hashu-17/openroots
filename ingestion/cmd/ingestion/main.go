@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/openroots/ingestion/internal/config"
 	"github.com/openroots/ingestion/internal/consumer"
+	"github.com/openroots/ingestion/internal/historyapi"
 	"github.com/openroots/ingestion/internal/registry"
 	"github.com/openroots/ingestion/internal/storage"
 )
@@ -69,10 +71,29 @@ func run(logger *log.Logger) error {
 	}
 	logger.Printf("Go telemetry ingestion is running with %d workers and queue capacity %d", settings.WorkerCount, settings.QueueCapacity)
 
+	apiServer := historyapi.New(settings.HTTPAddr, deviceRegistry, database, logger)
+	apiErrors := make(chan error, 1)
+	go func() {
+		logger.Printf("telemetry history API listening on %s", settings.HTTPAddr)
+		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			apiErrors <- err
+		}
+	}()
+	defer func() {
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := apiServer.Shutdown(shutdownContext); err != nil {
+			logger.Printf("history API shutdown failed: %v", err)
+		}
+	}()
+
 	select {
 	case <-ctx.Done():
 		return nil
 	case err := <-mqttConsumer.Fatal():
+		stop()
+		return err
+	case err := <-apiErrors:
 		stop()
 		return err
 	}

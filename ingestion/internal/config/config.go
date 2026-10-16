@@ -18,6 +18,7 @@ type Config struct {
 	DatabasePassword   string
 	RegistryURL        string
 	RegistryAPIKey     string
+	HTTPAddr           string
 	RegistrySyncEvery  time.Duration
 	RegistryWaitForNew time.Duration
 	QueueCapacity      int
@@ -36,6 +37,7 @@ func Load() (Config, error) {
 		DatabasePassword:   os.Getenv("DATABASE_PASSWORD"),
 		RegistryURL:        os.Getenv("REGISTRY_URL"),
 		RegistryAPIKey:     os.Getenv("REGISTRY_API_KEY"),
+		HTTPAddr:           valueOr("INGESTION_HTTP_ADDR", ":8081"),
 		RegistrySyncEvery:  3 * time.Second,
 		RegistryWaitForNew: 10 * time.Second,
 		QueueCapacity:      256,
