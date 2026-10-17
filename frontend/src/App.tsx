@@ -2,7 +2,6 @@ import { useEffect, useState, type FormEvent } from 'react'
 import * as Select from '@radix-ui/react-select'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import DevicesView from './DevicesView'
-import TelemetryPanel from './TelemetryPanel'
 import {
   ArrowLeft,
   Check,
@@ -33,7 +32,6 @@ type Device = {
 type MqttDeviceCredentials = { username: string; password: string; publishTopic: string }
 type DeviceRegistrationResponse = { device: Device; mqttCredentials: MqttDeviceCredentials | null }
 type SensorDraft = { channelName: string; unit: string }
-type TelemetryRecord = { id: string; deviceId: string; capturedAt: string; payload: Record<string, unknown> }
 type ApiResponse<T> = { success: boolean; message: string; data: T }
 type View = 'projects' | 'project'
 type ProjectTab = 'overview' | 'devices' | 'members' | 'settings'
@@ -78,10 +76,6 @@ function App() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [newMqttCredentials, setNewMqttCredentials] = useState<MqttDeviceCredentials | null>(null)
-  const [telemetryDevice, setTelemetryDevice] = useState<Device | null>(null)
-  const [telemetry, setTelemetry] = useState<TelemetryRecord[]>([])
-  const [telemetryLoading, setTelemetryLoading] = useState(false)
-  const [telemetryError, setTelemetryError] = useState('')
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId)
 
@@ -100,20 +94,6 @@ function App() {
   async function loadDevices(projectId: string) {
     if (!projectId) return setDevices([])
     setDevices(await request<Device[]>(`/api/v1/projects/${projectId}/devices`))
-  }
-
-  async function showTelemetry(device: Device) {
-    setTelemetryDevice(device)
-    setTelemetry([])
-    setTelemetryError('')
-    setTelemetryLoading(true)
-    try {
-      setTelemetry(await request<TelemetryRecord[]>(`/api/v1/telemetry?deviceId=${device.id}`))
-    } catch (cause) {
-      setTelemetryError(cause instanceof Error ? cause.message : 'Unable to load telemetry.')
-    } finally {
-      setTelemetryLoading(false)
-    }
   }
 
   useEffect(() => { void loadProjects() }, [])
@@ -230,7 +210,7 @@ function App() {
               {tab === 'overview' && <section className="grid gap-4 md:grid-cols-3"><div className="border border-[#2b3537] bg-[#171e20] p-6"><p className="font-mono text-[10px] uppercase tracking-[.12em] text-[#6f817f]">Registered devices</p><strong className="mt-5 block font-display text-5xl text-[#f1f3ed]">{devices.length}</strong><span className="mt-2 block text-sm text-[#82918e]">Hardware in this project</span></div><div className="border border-[#2b3537] bg-[#171e20] p-6"><p className="font-mono text-[10px] uppercase tracking-[.12em] text-[#6f817f]">Sensor channels</p><strong className="mt-5 block font-display text-5xl text-[#e6b85a]">{devices.reduce((total, device) => total + device.sensors.length, 0)}</strong><span className="mt-2 block text-sm text-[#82918e]">Ready for telemetry</span></div><div className="border border-[#2b3537] bg-[#171e20] p-6"><p className="font-mono text-[10px] uppercase tracking-[.12em] text-[#6f817f]">Members</p><strong className="mt-5 block font-display text-5xl text-[#82918e]">—</strong><span className="mt-2 block text-sm text-[#82918e]">Member management is coming later</span></div></section>}
               {tab === 'members' && <Unavailable title="Member management is not enabled yet" description="Authentication and project roles are the next backend boundary." icon={<Users className="size-6" />} />}
               {tab === 'settings' && <Unavailable title="Project settings are not enabled yet" description="Project creation and configuration will arrive with the next management slice." icon={<Settings2 className="size-6" />} />}
-              {tab === 'devices' && <><DevicesView devices={devices} loading={loading} error={error} notice={notice} mqttCredentials={newMqttCredentials} onDismissMqttCredentials={() => setNewMqttCredentials(null)} deviceName={deviceName} deviceType={deviceType} sensors={sensors} submitting={submitting} onSubmit={registerDevice} onShowTelemetry={showTelemetry} onDelete={deleteDevice} setDeviceName={setDeviceName} setDeviceType={setDeviceType} setSensors={setSensors} updateSensor={updateSensor} removeSensor={(index) => setSensors((current) => current.filter((_, sensorIndex) => sensorIndex !== index))} />{telemetryDevice && <TelemetryPanel deviceName={telemetryDevice.name} records={telemetry} loading={telemetryLoading} error={telemetryError} onClose={() => setTelemetryDevice(null)} />}</>}
+              {tab === 'devices' && <DevicesView devices={devices} loading={loading} error={error} notice={notice} mqttCredentials={newMqttCredentials} onDismissMqttCredentials={() => setNewMqttCredentials(null)} deviceName={deviceName} deviceType={deviceType} sensors={sensors} submitting={submitting} onSubmit={registerDevice} onDelete={deleteDevice} setDeviceName={setDeviceName} setDeviceType={setDeviceType} setSensors={setSensors} updateSensor={updateSensor} removeSensor={(index) => setSensors((current) => current.filter((_, sensorIndex) => sensorIndex !== index))} />}
             </>
           )}
         </main>

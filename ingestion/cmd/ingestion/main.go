@@ -78,7 +78,7 @@ func run(logger *log.Logger) error {
 	apiServer := historyapi.New(settings.HTTPAddr, deviceRegistry, database, liveHub, settings.AllowedOrigins, logger)
 	apiErrors := make(chan error, 1)
 	go func() {
-		logger.Printf("telemetry history API listening on %s", settings.HTTPAddr)
+		logger.Printf("telemetry API listening on %s", settings.HTTPAddr)
 		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			apiErrors <- err
 		}

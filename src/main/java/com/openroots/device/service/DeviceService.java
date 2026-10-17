@@ -9,7 +9,6 @@ import com.openroots.device.repository.DeviceRepository;
 import com.openroots.project.model.ProjectEntity;
 import com.openroots.project.repository.ProjectRepository;
 import jakarta.transaction.Transactional;
-import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -65,17 +64,6 @@ public class DeviceService {
     @Transactional
     public void delete(UUID projectId, UUID deviceId) {
         deviceRepository.delete(findById(projectId, deviceId));
-    }
-
-    public boolean exists(UUID deviceId) {
-        return deviceRepository.existsById(deviceId);
-    }
-
-    @Transactional
-    public void markOnline(UUID deviceId) {
-        DeviceEntity device = deviceRepository.findById(deviceId)
-                .orElseThrow(() -> new NotFoundException("Device not found: " + deviceId));
-        device.markOnline(Instant.now());
     }
 
     private void requireProject(UUID projectId) {

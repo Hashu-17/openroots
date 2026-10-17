@@ -56,9 +56,13 @@ func (s *Store) Close() {
 	s.pool.Close()
 }
 
-func (s *Store) InsertReadings(ctx context.Context, readings []telemetry.Reading) error {
+func (s *Store) InsertReadings(ctx context.Context, deviceID string, readings []telemetry.Reading) error {
 	if len(readings) == 0 {
 		return nil
+	}
+	var deviceUUID pgtype.UUID
+	if err := deviceUUID.Scan(deviceID); err != nil {
+		return fmt.Errorf("parse device UUID: %w", err)
 	}
 
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
@@ -81,6 +85,17 @@ func (s *Store) InsertReadings(ctx context.Context, readings []telemetry.Reading
 		if err != nil {
 			return fmt.Errorf("upsert telemetry for sensor %s: %w", reading.SensorID, err)
 		}
+	}
+	result, err := tx.Exec(ctx, `
+		UPDATE device
+		SET status = 'online', last_seen_at = now()
+		WHERE id = $1::uuid
+	`, deviceUUID)
+	if err != nil {
+		return fmt.Errorf("update device last-seen state: %w", err)
+	}
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("update device last-seen state: device %s was not found", deviceID)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

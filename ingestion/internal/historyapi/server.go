@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	_ "embed"
 	"fmt"
 	"io"
 	"log"
@@ -29,6 +30,9 @@ const (
 )
 
 var canonicalUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+//go:embed viewer.html
+var viewerHTML []byte
 
 type Server struct {
 	registry *registry.Registry
@@ -62,6 +66,12 @@ func New(
 	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write([]byte("ok\n"))
+	})
+	mux.HandleFunc("GET /viewer", func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		writer.Header().Set("Cache-Control", "no-store")
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write(viewerHTML)
 	})
 	mux.HandleFunc("GET /api/v1/devices/{deviceID}/telemetry", api.getDeviceHistory)
 	mux.HandleFunc("GET /api/v1/devices/{deviceID}/telemetry/live", live.Handler(deviceRegistry, hub, allowedOrigins, logger))
