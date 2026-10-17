@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/openroots/ingestion/internal/live"
 	"github.com/openroots/ingestion/internal/registry"
 	"github.com/openroots/ingestion/internal/storage"
 )
@@ -48,7 +49,14 @@ type historyResponse struct {
 	Next     string                   `json:"nextCursor,omitempty"`
 }
 
-func New(addr string, deviceRegistry *registry.Registry, store *storage.Store, logger *log.Logger) *http.Server {
+func New(
+	addr string,
+	deviceRegistry *registry.Registry,
+	store *storage.Store,
+	hub *live.Hub,
+	allowedOrigins []string,
+	logger *log.Logger,
+) *http.Server {
 	api := &Server{registry: deviceRegistry, store: store, logger: logger}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, _ *http.Request) {
@@ -56,6 +64,7 @@ func New(addr string, deviceRegistry *registry.Registry, store *storage.Store, l
 		_, _ = writer.Write([]byte("ok\n"))
 	})
 	mux.HandleFunc("GET /api/v1/devices/{deviceID}/telemetry", api.getDeviceHistory)
+	mux.HandleFunc("GET /api/v1/devices/{deviceID}/telemetry/live", live.Handler(deviceRegistry, hub, allowedOrigins, logger))
 	mux.HandleFunc("/", func(writer http.ResponseWriter, _ *http.Request) {
 		writeError(writer, http.StatusNotFound, "route not found")
 	})

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,7 @@ type Config struct {
 	RegistryURL        string
 	RegistryAPIKey     string
 	HTTPAddr           string
+	AllowedOrigins     []string
 	RegistrySyncEvery  time.Duration
 	RegistryWaitForNew time.Duration
 	QueueCapacity      int
@@ -38,6 +40,7 @@ func Load() (Config, error) {
 		RegistryURL:        os.Getenv("REGISTRY_URL"),
 		RegistryAPIKey:     os.Getenv("REGISTRY_API_KEY"),
 		HTTPAddr:           valueOr("INGESTION_HTTP_ADDR", ":8081"),
+		AllowedOrigins:     listOr("INGESTION_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"),
 		RegistrySyncEvery:  3 * time.Second,
 		RegistryWaitForNew: 10 * time.Second,
 		QueueCapacity:      256,
@@ -84,6 +87,18 @@ func valueOr(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func listOr(name, fallback string) []string {
+	value := valueOr(name, fallback)
+	parts := strings.Split(value, ",")
+	items := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			items = append(items, trimmed)
+		}
+	}
+	return items
 }
 
 func durationOr(name string, fallback time.Duration) (time.Duration, error) {

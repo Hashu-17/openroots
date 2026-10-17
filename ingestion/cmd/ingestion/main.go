@@ -12,6 +12,7 @@ import (
 	"github.com/openroots/ingestion/internal/config"
 	"github.com/openroots/ingestion/internal/consumer"
 	"github.com/openroots/ingestion/internal/historyapi"
+	"github.com/openroots/ingestion/internal/live"
 	"github.com/openroots/ingestion/internal/registry"
 	"github.com/openroots/ingestion/internal/storage"
 )
@@ -63,7 +64,10 @@ func run(logger *log.Logger) error {
 	}
 	defer database.Close()
 
-	mqttConsumer := consumer.New(settings, deviceRegistry, database, logger)
+	liveHub := live.NewHub()
+	defer liveHub.Close()
+
+	mqttConsumer := consumer.New(settings, deviceRegistry, database, liveHub, logger)
 	defer mqttConsumer.Close()
 	if err := mqttConsumer.Start(ctx); err != nil {
 		stop()
@@ -71,7 +75,7 @@ func run(logger *log.Logger) error {
 	}
 	logger.Printf("Go telemetry ingestion is running with %d workers and queue capacity %d", settings.WorkerCount, settings.QueueCapacity)
 
-	apiServer := historyapi.New(settings.HTTPAddr, deviceRegistry, database, logger)
+	apiServer := historyapi.New(settings.HTTPAddr, deviceRegistry, database, liveHub, settings.AllowedOrigins, logger)
 	apiErrors := make(chan error, 1)
 	go func() {
 		logger.Printf("telemetry history API listening on %s", settings.HTTPAddr)

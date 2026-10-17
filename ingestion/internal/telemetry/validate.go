@@ -18,9 +18,10 @@ const maxPayloadBytes = 64 * 1024
 var deviceTopicID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type Reading struct {
-	SensorID   string
-	Value      float64
-	RecordedAt time.Time
+	SensorID    string
+	ChannelName string
+	Value       float64
+	RecordedAt  time.Time
 }
 
 func DeviceIDFromTopic(topic string) (string, error) {
@@ -94,9 +95,10 @@ func Validate(payload []byte, schema registry.DeviceSchema) ([]Reading, error) {
 			return nil, fmt.Errorf("channel %q: %w", channel, err)
 		}
 		readings = append(readings, Reading{
-			SensorID:   sensorID,
-			Value:      value,
-			RecordedAt: capturedAt.UTC(),
+			SensorID:    sensorID,
+			ChannelName: channel,
+			Value:       value,
+			RecordedAt:  capturedAt.UTC(),
 		})
 	}
 	return readings, nil

@@ -9,6 +9,7 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/openroots/ingestion/internal/config"
+	"github.com/openroots/ingestion/internal/live"
 	"github.com/openroots/ingestion/internal/registry"
 	"github.com/openroots/ingestion/internal/storage"
 	"github.com/openroots/ingestion/internal/telemetry"
@@ -17,27 +18,35 @@ import (
 const subscriptionTopic = "openroots/v1/devices/+/telemetry"
 
 type Consumer struct {
-	client   mqtt.Client
-	queue    chan mqtt.Message
-	ctx      context.Context
-	registry *registry.Registry
-	store    *storage.Store
-	settings config.Config
-	logger   *log.Logger
-	fatal    chan error
-	workers  int
-	workerWG sync.WaitGroup
+	client    mqtt.Client
+	queue     chan mqtt.Message
+	ctx       context.Context
+	registry  *registry.Registry
+	store     *storage.Store
+	publisher *live.Hub
+	settings  config.Config
+	logger    *log.Logger
+	fatal     chan error
+	workers   int
+	workerWG  sync.WaitGroup
 }
 
-func New(settings config.Config, deviceRegistry *registry.Registry, store *storage.Store, logger *log.Logger) *Consumer {
+func New(
+	settings config.Config,
+	deviceRegistry *registry.Registry,
+	store *storage.Store,
+	publisher *live.Hub,
+	logger *log.Logger,
+) *Consumer {
 	consumer := &Consumer{
-		queue:    make(chan mqtt.Message, settings.QueueCapacity),
-		registry: deviceRegistry,
-		store:    store,
-		settings: settings,
-		logger:   logger,
-		fatal:    make(chan error, 1),
-		workers:  settings.WorkerCount,
+		queue:     make(chan mqtt.Message, settings.QueueCapacity),
+		registry:  deviceRegistry,
+		store:     store,
+		publisher: publisher,
+		settings:  settings,
+		logger:    logger,
+		fatal:     make(chan error, 1),
+		workers:   settings.WorkerCount,
 	}
 
 	options := mqtt.NewClientOptions().
@@ -170,6 +179,7 @@ func (c *Consumer) process(parent context.Context, message mqtt.Message) error {
 		// and the database upsert makes already committed retries idempotent.
 		return err
 	}
+	c.publisher.Publish(deviceID, readings)
 	message.Ack()
 	return nil
 }

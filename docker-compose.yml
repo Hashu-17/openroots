@@ -78,6 +78,7 @@ services:
       REGISTRY_URL: http://backend:8080/internal/v1/ingestion/device-registry
       REGISTRY_API_KEY: ${INGESTION_REGISTRY_API_KEY:?Set INGESTION_REGISTRY_API_KEY in .env}
       INGESTION_HTTP_ADDR: :8081
+      INGESTION_ALLOWED_ORIGINS: ${INGESTION_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
     depends_on:
       database:
         condition: service_healthy
