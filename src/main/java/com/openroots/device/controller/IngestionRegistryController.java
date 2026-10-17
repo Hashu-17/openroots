@@ -46,9 +46,12 @@ public class IngestionRegistryController {
     private DeviceRegistrySnapshot.DeviceSchema toDeviceSchema(DeviceEntity device) {
         return new DeviceRegistrySnapshot.DeviceSchema(
                 device.getId(),
+                device.getProject().getId(),
+                device.getProject().getName(),
+                device.getName(),
                 device.getSensors().stream()
                         .map(sensor -> new DeviceRegistrySnapshot.SensorSchema(
-                                sensor.getId(), sensor.getChannelName()))
+                                sensor.getId(), sensor.getChannelName(), sensor.getUnit()))
                         .toList());
     }
 

@@ -68,7 +68,7 @@ public class MosquittoDeviceProvisioner {
         ArrayNode roles = command.putArray("roles");
         roles.addObject().put("rolename", DEVICE_ROLE).put("priority", 10);
 
-        sendCommand(command);
+        sendCommand(command, false);
         return new MqttDeviceCredentials(
                 deviceId.toString(),
                 password,
@@ -80,10 +80,12 @@ public class MosquittoDeviceProvisioner {
         ObjectNode command = objectMapper.createObjectNode()
                 .put("command", "deleteClient")
                 .put("username", deviceId.toString());
-        sendCommand(command);
+        // A device may predate MQTT provisioning or already have been revoked.
+        // In either case, a missing broker client means there is nothing left to revoke.
+        sendCommand(command, true);
     }
 
-    private void sendCommand(ObjectNode command) {
+    private void sendCommand(ObjectNode command, boolean allowMissingClient) {
         String correlationData = UUID.randomUUID().toString();
         command.put("correlationData", correlationData);
         ObjectNode request = objectMapper.createObjectNode();
@@ -134,7 +136,7 @@ public class MosquittoDeviceProvisioner {
             if (responseBytes == null) {
                 throw new MqttProvisioningException("Mosquitto did not confirm the device credential change");
             }
-            requireSuccessfulResponse(responseBytes, correlationData);
+            requireSuccessfulResponse(responseBytes, correlationData, allowMissingClient);
         } catch (MqttProvisioningException exception) {
             throw exception;
         } catch (MqttException | java.io.IOException | InterruptedException exception) {
@@ -160,7 +162,10 @@ public class MosquittoDeviceProvisioner {
         }
     }
 
-    private void requireSuccessfulResponse(byte[] responseBytes, String correlationData)
+    private void requireSuccessfulResponse(
+            byte[] responseBytes,
+            String correlationData,
+            boolean allowMissingClient)
             throws java.io.IOException {
         JsonNode response = objectMapper.readTree(responseBytes);
         JsonNode responses = response.path("responses");
@@ -173,6 +178,9 @@ public class MosquittoDeviceProvisioner {
             throw new MqttProvisioningException("Mosquitto returned a mismatched provisioning response");
         }
         if (result.hasNonNull("error")) {
+            if (allowMissingClient && "Client not found".equals(result.path("error").asText())) {
+                return;
+            }
             throw new MqttProvisioningException("Mosquitto rejected the device credential change");
         }
     }

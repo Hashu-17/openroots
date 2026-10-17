@@ -5,9 +5,14 @@ import java.util.UUID;
 
 public record DeviceRegistrySnapshot(List<DeviceSchema> devices) {
 
-    public record DeviceSchema(UUID deviceId, List<SensorSchema> sensors) {
+    public record DeviceSchema(
+            UUID deviceId,
+            UUID projectId,
+            String projectName,
+            String name,
+            List<SensorSchema> sensors) {
     }
 
-    public record SensorSchema(UUID sensorId, String channelName) {
+    public record SensorSchema(UUID sensorId, String channelName, String unit) {
     }
 }

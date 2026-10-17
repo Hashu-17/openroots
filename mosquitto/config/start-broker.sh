@@ -13,6 +13,7 @@ if [ ! -f "$DYNSEC_FILE" ]; then
   mosquitto_ctrl dynsec init "$DYNSEC_FILE" "$MQTT_ADMIN_USERNAME" "$MQTT_ADMIN_PASSWORD"
   chmod 600 "$DYNSEC_FILE"
 fi
+chown mosquitto:mosquitto "$DYNSEC_FILE"
 
 broker_control() {
   mosquitto_ctrl -h 127.0.0.1 -p 1883 \
@@ -49,13 +50,13 @@ broker_control setDefaultACLAccess subscribe deny
 broker_control setDefaultACLAccess publishClientReceive deny
 broker_control setDefaultACLAccess unsubscribe allow
 
-if ! broker_control getRole device-publisher >/dev/null 2>&1; then
+if ! broker_control getRole device-publisher 2>&1 | grep -q '^Rolename:'; then
   broker_control createRole device-publisher
   broker_control addRoleACL device-publisher publishClientSend \
     'openroots/v1/devices/%u/telemetry' allow 10
 fi
 
-if ! broker_control getRole telemetry-ingestor >/dev/null 2>&1; then
+if ! broker_control getRole telemetry-ingestor 2>&1 | grep -q '^Rolename:'; then
   broker_control createRole telemetry-ingestor
   broker_control addRoleACL telemetry-ingestor subscribePattern \
     'openroots/v1/devices/+/telemetry' allow 10
@@ -63,10 +64,10 @@ if ! broker_control getRole telemetry-ingestor >/dev/null 2>&1; then
     'openroots/v1/devices/+/telemetry' allow 10
 fi
 
-if broker_control getClient "$MQTT_INGESTOR_USERNAME" >/dev/null 2>&1; then
+if broker_control getClient "$MQTT_INGESTOR_USERNAME" 2>&1 | grep -q '^Username:'; then
   broker_control setClientPassword "$MQTT_INGESTOR_USERNAME" "$MQTT_INGESTOR_PASSWORD"
 else
-  broker_control createClient "$MQTT_INGESTOR_USERNAME" "$MQTT_INGESTOR_PASSWORD"
+  broker_control createClient "$MQTT_INGESTOR_USERNAME" -p "$MQTT_INGESTOR_PASSWORD"
   broker_control addClientRole "$MQTT_INGESTOR_USERNAME" telemetry-ingestor 10
 fi
 

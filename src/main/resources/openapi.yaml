@@ -6,49 +6,9 @@ info:
 servers:
   - url: http://localhost:8080
 tags:
-  - name: Authentication
+  - name: Projects
   - name: Devices
 paths:
-  /api/v1/auth/register:
-    post:
-      tags: [Authentication]
-      summary: Register a user
-      operationId: registerUser
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RegisterRequest'
-      responses:
-        '201':
-          description: User registered
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '409':
-          description: Email already registered
-  /api/v1/auth/login:
-    post:
-      tags: [Authentication]
-      summary: Log in and receive a JWT
-      operationId: login
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
-      responses:
-        '200':
-          description: Authentication succeeded
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
   /api/v1/projects:
     get:
       tags: [Projects]
@@ -58,6 +18,10 @@ paths:
       responses:
         '200':
           description: Projects returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListApiResponse'
   /api/v1/projects/{projectId}:
     get:
       tags: [Projects]
@@ -69,12 +33,16 @@ paths:
       responses:
         '200':
           description: Project returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectApiResponse'
         '404':
           $ref: '#/components/responses/NotFound'
   /api/v1/projects/{projectId}/devices:
     get:
       tags: [Devices]
-      summary: List project devices
+      summary: List devices in a project
       operationId: listDevices
       security: []
       parameters:
@@ -82,17 +50,23 @@ paths:
       responses:
         '200':
           description: Devices returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceListApiResponse'
         '404':
           $ref: '#/components/responses/NotFound'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-      summary: Register a device with sensors
+    post:
       tags: [Devices]
+      summary: Register a device with sensors
+      description: >-
+        Creates a device and its sensors. When MQTT provisioning is enabled,
+        the response includes device credentials and a publish topic. The
+        generated password is returned once and is not stored for later retrieval.
+      operationId: registerDevice
       security: []
       parameters:
         - $ref: '#/components/parameters/ProjectId'
-      security:
-        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -101,17 +75,15 @@ paths:
               $ref: '#/components/schemas/DeviceCreateRequest'
       responses:
         '201':
-          description: Device registered; MQTT credentials are returned once when broker provisioning is enabled
+          description: Device registered
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceRegistrationApiResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/projects/{projectId}/devices/{deviceId}:
     get:
       tags: [Devices]
@@ -124,16 +96,30 @@ paths:
       responses:
         '200':
           description: Device returned
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceApiResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Devices]
+      summary: Delete a device and revoke its MQTT credential
+      operationId: deleteDevice
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Device deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteDeviceApiResponse'
         '404':
           $ref: '#/components/responses/NotFound'
 components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
   parameters:
     ProjectId:
       name: projectId
@@ -150,49 +136,17 @@ components:
         type: string
         format: uuid
   schemas:
-    RegisterRequest:
+    ApiResponseFields:
       type: object
-      required: [email, password]
+      required: [success, message, timestamp]
       properties:
-        email:
+        success:
+          type: boolean
+        message:
           type: string
-          format: email
-        password:
+        timestamp:
           type: string
-          format: password
-          minLength: 8
-    LoginRequest:
-      $ref: '#/components/schemas/RegisterRequest'
-    AuthResponse:
-      type: object
-      required: [accessToken, tokenType]
-      properties:
-        accessToken:
-          type: string
-        tokenType:
-          type: string
-          example: Bearer
-    DeviceCreateRequest:
-      type: object
-      required: [name, type, sensors]
-      properties:
-        name:
-          type: string
-        type:
-          type: string
-        sensors:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/SensorCreateRequest'
-    SensorCreateRequest:
-      type: object
-      required: [channelName]
-      properties:
-        channelName:
-          type: string
-        unit:
-          type: string
+          format: date-time
     ProjectResponse:
       type: object
       required: [id, name, createdAt]
@@ -205,6 +159,16 @@ components:
         createdAt:
           type: string
           format: date-time
+    SensorCreateRequest:
+      type: object
+      required: [channelName]
+      properties:
+        channelName:
+          type: string
+          minLength: 1
+        unit:
+          type: string
+          nullable: true
     SensorResponse:
       allOf:
         - $ref: '#/components/schemas/SensorCreateRequest'
@@ -214,6 +178,21 @@ components:
             id:
               type: string
               format: uuid
+    DeviceCreateRequest:
+      type: object
+      required: [name, type, sensors]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        type:
+          type: string
+          minLength: 1
+        sensors:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SensorCreateRequest'
     DeviceResponse:
       type: object
       required: [id, projectId, name, type, status, registeredAt, sensors]
@@ -237,43 +216,80 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SensorResponse'
+    ProjectListApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseFields'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProjectResponse'
+    ProjectApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseFields'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/ProjectResponse'
+    DeviceListApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseFields'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/DeviceResponse'
+    DeviceApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseFields'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/DeviceResponse'
     DeviceRegistrationResponse:
       type: object
-      required: [device]
+      required: [device, mqttCredentials]
       properties:
         device:
           $ref: '#/components/schemas/DeviceResponse'
         mqttCredentials:
+          type: object
           nullable: true
-          description: Present only on successful registration when MQTT provisioning is enabled. The password is shown once.
-            type: object
-            required: [username, password, publishTopic]
-            properties:
+          description: Null when MQTT provisioning is disabled.
+          required: [username, password, publishTopic]
+          properties:
             username:
               type: string
+              format: uuid
             password:
               type: string
             publishTopic:
               type: string
     DeviceRegistrationApiResponse:
-      type: object
-      required: [success, message, data, timestamp]
-      properties:
-        success:
-          type: boolean
-        message:
-          type: string
-        data:
-          $ref: '#/components/schemas/DeviceRegistrationResponse'
-        timestamp:
-          type: string
-          format: date-time
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseFields'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/DeviceRegistrationResponse'
+    DeleteDeviceApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseFields'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              nullable: true
   responses:
     BadRequest:
       description: Request validation failed
-    Unauthorized:
-      description: Authentication required or invalid
-    Forbidden:
-      description: Authenticated user is not allowed to perform this operation
     NotFound:
-      description: Resource not found
+      description: Project or device not found

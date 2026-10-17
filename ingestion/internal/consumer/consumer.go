@@ -174,7 +174,7 @@ func (c *Consumer) process(parent context.Context, message mqtt.Message) error {
 		return nil
 	}
 
-	if err := c.writeWithRetry(ctx, readings); err != nil {
+	if err := c.writeWithRetry(ctx, deviceID, readings); err != nil {
 		// Do not ack on storage failure. Exiting causes broker session redelivery,
 		// and the database upsert makes already committed retries idempotent.
 		return err
@@ -184,7 +184,7 @@ func (c *Consumer) process(parent context.Context, message mqtt.Message) error {
 	return nil
 }
 
-func (c *Consumer) writeWithRetry(ctx context.Context, readings []telemetry.Reading) error {
+func (c *Consumer) writeWithRetry(ctx context.Context, deviceID string, readings []telemetry.Reading) error {
 	backoffs := []time.Duration{250 * time.Millisecond, 750 * time.Millisecond, 1500 * time.Millisecond}
 	var lastErr error
 	for attempt := 0; attempt <= len(backoffs); attempt++ {

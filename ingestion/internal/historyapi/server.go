@@ -67,6 +67,9 @@ func New(
 		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write([]byte("ok\n"))
 	})
+	mux.HandleFunc("GET /api/v1/catalog", func(writer http.ResponseWriter, _ *http.Request) {
+		writeJSON(writer, http.StatusOK, map[string]any{"devices": deviceRegistry.Devices()})
+	})
 	mux.HandleFunc("GET /viewer", func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 		writer.Header().Set("Cache-Control", "no-store")

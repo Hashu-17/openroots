@@ -10,7 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface DeviceRepository extends JpaRepository<DeviceEntity, UUID> {
 
-    @EntityGraph(attributePaths = "sensors")
+    @EntityGraph(attributePaths = {"project", "sensors"})
     @Query("select distinct device from DeviceEntity device")
     List<DeviceEntity> findAllWithSensors();
 

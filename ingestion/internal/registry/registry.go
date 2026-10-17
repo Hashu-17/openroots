@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,17 +21,25 @@ type Snapshot struct {
 }
 
 type Device struct {
-	DeviceID string   `json:"deviceId"`
-	Sensors  []Sensor `json:"sensors"`
+	DeviceID    string   `json:"deviceId"`
+	ProjectID   string   `json:"projectId"`
+	ProjectName string   `json:"projectName"`
+	Name        string   `json:"name"`
+	Sensors     []Sensor `json:"sensors"`
 }
 
 type Sensor struct {
 	SensorID    string `json:"sensorId"`
 	ChannelName string `json:"channelName"`
+	Unit        string `json:"unit"`
 }
 
 type DeviceSchema struct {
-	Sensors map[string]string
+	ProjectID   string
+	ProjectName string
+	Name        string
+	Sensors     map[string]string
+	SensorList  []Sensor
 }
 
 type Registry struct {
@@ -44,9 +53,9 @@ type Registry struct {
 
 func New(url, apiKey string) *Registry {
 	return &Registry{
-		url:    url,
-		apiKey: apiKey,
-		client: &http.Client{Timeout: 5 * time.Second},
+		url:     url,
+		apiKey:  apiKey,
+		client:  &http.Client{Timeout: 5 * time.Second},
 		devices: make(map[string]DeviceSchema),
 	}
 }
@@ -83,10 +92,14 @@ func (r *Registry) Refresh(ctx context.Context) error {
 		if !uuidPattern.MatchString(device.DeviceID) {
 			return fmt.Errorf("registry returned a non-canonical device UUID")
 		}
+		if !uuidPattern.MatchString(device.ProjectID) || strings.TrimSpace(device.Name) == "" || strings.TrimSpace(device.ProjectName) == "" {
+			return fmt.Errorf("registry returned invalid project/device metadata for device %s", device.DeviceID)
+		}
 		if _, exists := devices[device.DeviceID]; exists {
 			return fmt.Errorf("registry returned duplicate device IDs")
 		}
 		sensors := make(map[string]string, len(device.Sensors))
+		sensorList := make([]Sensor, 0, len(device.Sensors))
 		for _, sensor := range device.Sensors {
 			channel := sensor.ChannelName
 			if !uuidPattern.MatchString(sensor.SensorID) || channel == "" {
@@ -96,8 +109,15 @@ func (r *Registry) Refresh(ctx context.Context) error {
 				return fmt.Errorf("registry returned duplicate channel names for device %s", device.DeviceID)
 			}
 			sensors[channel] = sensor.SensorID
+			sensorList = append(sensorList, sensor)
 		}
-		devices[device.DeviceID] = DeviceSchema{Sensors: sensors}
+		devices[device.DeviceID] = DeviceSchema{
+			ProjectID:   device.ProjectID,
+			ProjectName: device.ProjectName,
+			Name:        device.Name,
+			Sensors:     sensors,
+			SensorList:  sensorList,
+		}
 	}
 
 	r.mu.Lock()
@@ -127,6 +147,23 @@ func (r *Registry) Device(deviceID string) (DeviceSchema, bool) {
 	defer r.mu.RUnlock()
 	schema, exists := r.devices[deviceID]
 	return schema, exists
+}
+
+func (r *Registry) Devices() []Device {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	devices := make([]Device, 0, len(r.devices))
+	for deviceID, schema := range r.devices {
+		devices = append(devices, Device{
+			DeviceID:    deviceID,
+			ProjectID:   schema.ProjectID,
+			ProjectName: schema.ProjectName,
+			Name:        schema.Name,
+			Sensors:     append([]Sensor(nil), schema.SensorList...),
+		})
+	}
+	return devices
 }
 
 func (r *Registry) WaitForDevice(ctx context.Context, deviceID string, wait time.Duration) (DeviceSchema, bool) {
