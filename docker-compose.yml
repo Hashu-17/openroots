@@ -17,16 +17,21 @@ services:
       retries: 12
 
   mosquitto:
-    image: eclipse-mosquitto:2.0
+    image: eclipse-mosquitto:2.1.2-alpine
     container_name: openroots-mosquitto
+    environment:
+      MQTT_ADMIN_USERNAME: ${MQTT_ADMIN_USERNAME:-openroots-admin}
+      MQTT_ADMIN_PASSWORD: ${MQTT_ADMIN_PASSWORD:?Set MQTT_ADMIN_PASSWORD in .env}
+      MQTT_INGESTOR_USERNAME: ${MQTT_INGESTOR_USERNAME:-telemetry-ingestor-spring}
+      MQTT_INGESTOR_PASSWORD: ${MQTT_INGESTOR_PASSWORD:?Set MQTT_INGESTOR_PASSWORD in .env}
+    command: ["/bin/sh", "/mosquitto/config/start-broker.sh"]
     volumes:
       - ./mosquitto/config:/mosquitto/config:ro
       - mosquitto_data:/mosquitto/data
-      - mosquitto_log:/mosquitto/log
     ports:
-      - "${MQTT_PORT:-1883}:1883"
+      - "${MQTT_BIND_ADDRESS:-127.0.0.1}:${MQTT_PORT:-1883}:1883"
     healthcheck:
-      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 -W 3 >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "mosquitto_ctrl -h 127.0.0.1 -u \"$${MQTT_ADMIN_USERNAME}\" -P \"$${MQTT_ADMIN_PASSWORD}\" dynsec getDefaultACLAccess publishClientSend >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -42,6 +47,8 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       OPENROOTS_MQTT_URL: tcp://mosquitto:1883
+      OPENROOTS_MQTT_USERNAME: ${MQTT_INGESTOR_USERNAME:-telemetry-ingestor-spring}
+      OPENROOTS_MQTT_PASSWORD: ${MQTT_INGESTOR_PASSWORD:?Set MQTT_INGESTOR_PASSWORD in .env}
     depends_on:
       database:
         condition: service_healthy
@@ -63,4 +70,3 @@ services:
 volumes:
   postgres_data:
   mosquitto_data:
-  mosquitto_log:
