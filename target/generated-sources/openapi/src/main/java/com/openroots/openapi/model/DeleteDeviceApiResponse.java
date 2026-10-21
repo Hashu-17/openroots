@@ -20,7 +20,7 @@ import jakarta.annotation.Generated;
  * DeleteDeviceApiResponse
  */
 
-@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", date = "2026-10-21T19:57:58.322158500+05:30[Asia/Calcutta]", comments = "Generator version: 7.8.0")
+@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", date = "2026-10-21T20:32:16.593104+05:30[Asia/Calcutta]", comments = "Generator version: 7.8.0")
 public class DeleteDeviceApiResponse {
 
   private Boolean success;
