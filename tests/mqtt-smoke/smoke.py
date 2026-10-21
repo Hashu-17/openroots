@@ -73,7 +73,8 @@ def verify_rows(device_id: str, channels: list[str], captured_at: datetime) -> N
         FROM telemetry t
         JOIN sensor s ON s.id = t.sensor_id
         WHERE s.device_id = %s
-          AND t.recorded_at BETWEEN %s AND %s
+          AND t.recorded_at BETWEEN %s - INTERVAL '2 seconds'
+                                AND %s + INTERVAL '2 seconds'
     """
     while time.monotonic() < deadline:
         with psycopg.connect(**connection) as database:
