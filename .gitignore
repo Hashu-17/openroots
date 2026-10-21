@@ -4,3 +4,6 @@
 mosquitto/data/
 __pycache__/
 *.py[cod]
+docs
+architecture
+examples
