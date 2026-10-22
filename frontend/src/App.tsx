@@ -7,7 +7,9 @@ import type { Device, Project, TelemetryRecord } from './types/api'
 
 type View = 'projects' | 'project'
 
+// App owns data shared by multiple screens and decides which main screen is visible.
 export default function App() {
+  // Keep server data and screen status here so both project views can use the same state.
   const [projects, setProjects] = useState<Project[]>([])
   const [devices, setDevices] = useState<Device[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
@@ -23,8 +25,10 @@ export default function App() {
   const [telemetryError, setTelemetryError] = useState('')
   const loadedDevicesProjectId = useRef('')
 
+  // Look up the full project object for the selected ID; it can be undefined while data loads.
   const selectedProject = projects.find((project) => project.id === selectedProjectId)
 
+  // Load projects once when the app starts. The active flag ignores a late response after unmount.
   useEffect(() => {
     let active = true
     async function loadProjects() {
@@ -44,6 +48,7 @@ export default function App() {
     return () => { active = false }
   }, [])
 
+  // Load or refresh devices for the currently selected project.
   const reloadDevices = useCallback(async () => {
     if (!selectedProjectId) {
       setDevices([])
@@ -64,10 +69,12 @@ export default function App() {
     }
   }, [selectedProjectId])
 
+  // Fetch devices after opening a project or switching to another project.
   useEffect(() => {
     if (view === 'project' && selectedProjectId) void reloadDevices()
   }, [reloadDevices, selectedProjectId, view])
 
+  // Move from the project list to the selected project's workspace and clear old feedback.
   function openProject(projectId: string) {
     setSelectedProjectId(projectId)
     setView('project')
@@ -75,6 +82,7 @@ export default function App() {
     setDevicesNotice('')
   }
 
+  // Load recent readings for the device the user chose in the inventory.
   async function showTelemetry(device: Device) {
     setTelemetryDevice(device)
     setTelemetry([])
@@ -89,6 +97,7 @@ export default function App() {
     }
   }
 
+  // Ask for confirmation before permanently deleting a device and its related data.
   async function deleteDevice(deviceId: string) {
     const device = devices.find((item) => item.id === deviceId)
     if (!device || !window.confirm(`Delete ${device.name}? This permanently removes its sensors and telemetry.`)) return
@@ -103,6 +112,7 @@ export default function App() {
     }
   }
 
+  // App switches between the project index and workspace; each view handles its own screen UI.
   return <Tooltip.Provider delayDuration={300}><div className="min-h-screen bg-[#101416] text-[#e7ebe7]">
     <header className="border-b border-[#2a3335] bg-[#141a1c]">
       <div className="mx-auto flex min-h-[78px] max-w-[1280px] items-center justify-between px-6 sm:px-10">

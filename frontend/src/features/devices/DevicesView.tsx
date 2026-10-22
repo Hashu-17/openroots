@@ -2,6 +2,7 @@ import { LoaderCircle, Radio, Trash2 } from 'lucide-react'
 import DeviceRegistrationForm from './DeviceRegistrationForm'
 import type { Device } from '../../types/api'
 
+// These props connect the device screen to data and actions owned by its parent.
 type DevicesViewProps = {
   projectId: string
   devices: Device[]
@@ -13,11 +14,14 @@ type DevicesViewProps = {
   onDelete: (deviceId: string) => void
 }
 
+// Convert the backend timestamp into a shorter date for the inventory row.
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// Show the saved device list beside the form used to add another device.
 export default function DevicesView({ projectId, devices, loading, error, notice, onRegistered, onShowTelemetry, onDelete }: DevicesViewProps) {
+  // The outer section places the inventory and registration form side by side on wide screens.
   return <section className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,.85fr)]">
     <div className="min-h-[480px] border border-[#2b3537] bg-[#171e20]">
       <div className="flex items-center justify-between border-b border-[#2b3537] px-5 py-5 sm:px-7">
@@ -26,12 +30,14 @@ export default function DevicesView({ projectId, devices, loading, error, notice
       </div>
       {error && <div className="m-5 border-l-4 border-[#dc755d] bg-[#321f1d] px-4 py-3 text-sm text-[#f1b0a0]" role="alert">{error}</div>}
       {notice && <div className="m-5 border-l-4 border-[#41c7a1] bg-[#172825] px-4 py-3 text-sm text-[#91ddc4]" role="status">{notice}</div>}
+      {/* Show one state at a time: loading, an empty inventory, or the list of devices. */}
       {loading ? <div className="flex min-h-80 items-center justify-center gap-3 text-sm text-[#82918e]"><LoaderCircle className="size-5 animate-spin text-[#41c7a1]" />Loading devices...</div>
         : devices.length === 0 ? <div className="flex min-h-80 flex-col items-center justify-center gap-2 px-7 text-center text-sm text-[#82918e]"><Radio className="mb-2 size-10 text-[#6f817f]" /><strong className="font-display text-lg text-[#e7ebe7]">No devices registered</strong><span>Add the first physical device from the form.</span></div>
           : <div>{devices.map((device) => <article className="border-b border-[#2b3537] px-5 py-5 last:border-b-0 sm:px-7" key={device.id}>
             <div className="flex items-start gap-3.5">
               <div className="grid size-9 shrink-0 place-items-center bg-[#202a2c] text-[#e6b85a]"><Radio className="size-4" /></div>
               <div className="min-w-0 flex-1">
+                {/* Selecting a device opens its telemetry; the status badge is informational. */}
                 <div className="flex flex-wrap items-center gap-2">
                   <button className="border-0 bg-transparent p-0 text-left font-display text-base font-bold text-[#f1f3ed] transition hover:text-[#e6b85a]" type="button" onClick={() => onShowTelemetry(device)}>{device.name}</button>
                   <span className="bg-[#172825] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-[#41c7a1]">{device.status}</span>
