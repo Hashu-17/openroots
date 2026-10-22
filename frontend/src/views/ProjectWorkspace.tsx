@@ -7,6 +7,7 @@ import type { Device, Project, TelemetryRecord } from '../types/api'
 
 type ProjectTab = 'overview' | 'devices' | 'members' | 'settings'
 
+// Props provide the selected project's data and actions from App, where shared data is loaded.
 type ProjectWorkspaceProps = {
   projects: Project[]
   project?: Project
@@ -27,15 +28,19 @@ type ProjectWorkspaceProps = {
   onCloseTelemetry: () => void
 }
 
+// Use the same date style in the project heading and list views.
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// Members and settings are shown as unavailable until their backend features are implemented.
 function Unavailable({ title, description, icon }: { title: string; description: string; icon: React.ReactNode }) {
   return <div className="flex min-h-72 flex-col items-center justify-center border border-dashed border-[#394345] px-6 text-center"><span className="mb-4 text-[#6f817f]">{icon}</span><h2 className="font-display text-2xl font-bold text-[#e7ebe7]">{title}</h2><p className="mt-2 max-w-md text-sm text-[#82918e]">{description}</p></div>
 }
 
+// This view combines the selected project's header, tabs, summary, and feature screens.
 export default function ProjectWorkspace(props: ProjectWorkspaceProps) {
+  // The selected tab is local UI state; changing tabs does not need a backend request.
   const [tab, setTab] = useState<ProjectTab>('overview')
   const { projects, project, projectId, devices, devicesLoading, devicesError, devicesNotice, telemetryDevice, telemetry, telemetryLoading, telemetryError } = props
   const projectTabs: { id: ProjectTab; label: string; icon: typeof FolderKanban; available: boolean }[] = [
@@ -45,14 +50,18 @@ export default function ProjectWorkspace(props: ProjectWorkspaceProps) {
     { id: 'settings', label: 'Settings', icon: Settings2, available: false },
   ]
 
+  // When the user switches projects, return to Overview so they do not land on a stale tab.
   useEffect(() => { setTab('overview') }, [projectId])
 
+  // Refresh the inventory every five seconds while the Devices tab is open.
+  // The cleanup function stops the timer when the user changes tabs or projects.
   useEffect(() => {
     if (tab !== 'devices' || !projectId) return
     const interval = window.setInterval(() => { void props.onReloadDevices() }, 5000)
     return () => window.clearInterval(interval)
   }, [projectId, props.onReloadDevices, tab])
 
+  // Each tab selects a different section below; the Devices tab delegates to the device feature.
   return <>
     <button className="mb-8 inline-flex items-center gap-2 border-0 bg-transparent p-0 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#7f908e] transition hover:text-[#e6b85a]" onClick={props.onBack} type="button"><ArrowLeft className="size-4" />Back to projects</button>
     <section className="mb-8 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
