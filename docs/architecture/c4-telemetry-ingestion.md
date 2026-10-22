@@ -1,4 +1,4 @@
-# C4 dynamic view: MQTT telemetry ingestion
+# Dynamic View: MQTT Telemetry Ingestion
 
 This view follows one telemetry publication through the current Spring MQTT integration. The broker subscription is configured in `MqttConfig`; `MqttTelemetryConsumer` derives the device UUID from the topic, parses the payload, and passes the reading to `TelemetryService` for storage.
 

@@ -1,8 +1,8 @@
-# OpenRoots documentation
+# Overview
 
 This folder documents the current `spring-mqtt-ingestion` implementation. Where a document describes a target or proposed feature rather than implemented behavior, it says so explicitly.
 
-## Product and behavior
+## Product and Behavior
 
 - [Requirements](product/requirements.md)
 - [Use cases](product/use-cases.md)
@@ -12,16 +12,18 @@ This folder documents the current `spring-mqtt-ingestion` implementation. Where 
 
 - [Architecture guide and C4 diagrams](architecture/README.md)
 
-## Security
+## Developer Guides
 
-- [Authentication status and target design](security/authentication.md)
+- [Frontend Guide](frontend/README.md)
+- Backend Guide
+- Testing
 
-## Contracts and integrations
+## References
 
+- [Authentication and Authorization](security/authentication.md)
 - [Telemetry MQTT contract](contracts/mqtt-telemetry.md)
-
-## API contract
-
-- [OpenAPI description](openapi.yaml) is the contract used to generate Spring API interfaces and models during Maven builds.
+- [OpenAPI description](openapi.yaml) 
 
 The `v1` in `/api/v1` is the HTTP API's major compatibility version. It is independent of the product release number and the OpenAPI document's `info.version` field.
+
+

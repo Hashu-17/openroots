@@ -1,4 +1,4 @@
-# C4 level 1: system context
+# Level 1: System Context
 
 The system boundary covers the OpenRoots platform. People use the web interface to inspect projects, register devices, and view telemetry. Registered devices publish telemetry through MQTT.
 
