@@ -1,4 +1,4 @@
-# C4 level 3: Spring backend components
+# Level 3: Spring backend components
 
 The Spring backend has two input paths: generated REST API interfaces route HTTP requests to controllers, while the MQTT inbound adapter forwards broker messages to the telemetry consumer. Both paths use application services and repositories to access the database.
 

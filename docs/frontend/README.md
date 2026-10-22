@@ -2,6 +2,8 @@
 
 The frontend is a React and TypeScript single-page application. Its current navigation is state-based: a user moves between the project index and a selected project's workspace. It does not use a routing library.
 
+For a complete beginner-friendly walkthrough of every frontend file, function, hook, async request, API type, CSS rule, and build setting, see [frontend A-to-Z guide](docs/frontend-a-z-guide.md).
+
 ## Source map
 
 ```text

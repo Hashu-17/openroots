@@ -1,4 +1,4 @@
-# Frontend components (C4 level 3)
+# Level 3: Frontend components 
 
 This view describes the React frontend currently implemented on `spring-mqtt-ingestion`. It focuses on the main UI and API boundaries rather than individual presentational elements.
 

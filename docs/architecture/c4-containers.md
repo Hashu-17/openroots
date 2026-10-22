@@ -1,4 +1,4 @@
-# C4 level 2: containers
+# level 2: containers
 
 The platform runs as four application containers in Docker Compose. The browser loads the React UI from Nginx; Nginx serves the static app and proxies `/api/` requests to Spring Boot. Devices publish MQTT messages to Mosquitto, which Spring Boot consumes. The backend persists application and telemetry data in TimescaleDB/PostgreSQL.
 

@@ -1,4 +1,4 @@
-# C4 deployment view: local Docker Compose
+# Deployment view: Local Docker Compose
 
 The local development deployment runs the platform containers on one Docker host. The browser and an optional MQTT test client run on the workstation outside the Compose network and connect through published host ports.
 
