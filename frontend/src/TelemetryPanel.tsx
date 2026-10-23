@@ -1,11 +1,5 @@
 import { LoaderCircle, X } from 'lucide-react'
-
-type TelemetryRecord = {
-  id: string
-  deviceId: string
-  capturedAt: string
-  payload: Record<string, unknown>
-}
+import type { TelemetryRecord } from './types/api'
 
 type TelemetryPanelProps = {
   deviceName: string

@@ -22,4 +22,4 @@ flowchart LR
     class openroots system;
 ```
 
-Authentication is not currently enforced by the Spring security configuration; see [authentication status](authentication.md).
+Authentication is not currently enforced by the Spring security configuration; see [authentication status](../security/authentication.md).

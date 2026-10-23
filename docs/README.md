@@ -4,15 +4,21 @@ This folder documents the current `spring-mqtt-ingestion` implementation. Where 
 
 ## Product and behavior
 
-- [Requirements](feature_specs/requirements.md)
-- [Use cases](feature_specs/use-cases.md)
-- [Business rules](feature_specs/business-rules.md)
+- [Requirements](product/requirements.md)
+- [Use cases](product/use-cases.md)
+- [Business rules](product/business-rules.md)
 
 ## Architecture
 
 - [Architecture guide and C4 diagrams](architecture/README.md)
-- [Authentication status and target design](architecture/authentication.md)
-- [Telemetry MQTT contract](architecture/telemetry-contract.md)
+
+## Security
+
+- [Authentication status and target design](security/authentication.md)
+
+## Contracts and integrations
+
+- [Telemetry MQTT contract](contracts/mqtt-telemetry.md)
 
 ## API contract
 
