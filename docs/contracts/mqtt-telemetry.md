@@ -1,6 +1,6 @@
 # Telemetry MQTT Contract
 
-> **Status:** Proposed contract for a future Go ingestion service. This branch already ingests MQTT telemetry through Spring, but its runtime behavior does not enforce every requirement below. See the current-state [C4 telemetry flow](c4-telemetry-ingestion.md) and the implementation notes in this document before treating a rule as implemented.
+> **Status:** Proposed contract for a future Go ingestion service. This branch already ingests MQTT telemetry through Spring, but its runtime behavior does not enforce every requirement below. See the current-state [C4 telemetry flow](../architecture/c4-telemetry-ingestion.md) and the implementation notes in this document before treating a rule as implemented.
 
 ## MQTT topic
 

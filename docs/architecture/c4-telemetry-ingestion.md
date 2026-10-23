@@ -22,4 +22,4 @@ sequenceDiagram
     Service-->>Consumer: Ingestion complete
 ```
 
-The current MQTT request uses `deviceId`, `capturedAt`, and a channel-to-value `payload`. The broker topic also carries a device ID; the consumer rejects a body `deviceId` that disagrees with the topic. See the implementation in `MqttTelemetryConsumer` and the [telemetry contract](telemetry-contract.md) for the distinction between current behavior and stricter design requirements.
+The current MQTT request uses `deviceId`, `capturedAt`, and a channel-to-value `payload`. The broker topic also carries a device ID; the consumer rejects a body `deviceId` that disagrees with the topic. See the implementation in `MqttTelemetryConsumer` and the [telemetry contract](../contracts/mqtt-telemetry.md) for the distinction between current behavior and stricter design requirements.
