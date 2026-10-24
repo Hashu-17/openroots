@@ -3,9 +3,6 @@
 !.env.example
 /target/
 /prompts/
-/plans/*
-!/plans/logs/
-/plans/logs/*
-!/plans/logs/migrate_to_openapi_contract.md
+/plans/
 /architecture/
 /examples/
