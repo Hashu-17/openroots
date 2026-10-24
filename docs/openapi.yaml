@@ -1,0 +1,412 @@
+openapi: 3.0.3
+info:
+  title: OpenRoots API
+  version: 0.1.0
+  description: REST API for the OpenRoots self-hosted IoT platform.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: Projects
+  - name: Devices
+  - name: Telemetry
+paths:
+  /api/v1/projects:
+    get:
+      tags: [Projects]
+      summary: List projects
+      operationId: listProjects
+      responses:
+        '200':
+          description: Projects returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListApiResponse'
+  /api/v1/projects/{projectId}:
+    get:
+      tags: [Projects]
+      summary: Get a project
+      operationId: getProject
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Project returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectApiResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/projects/{projectId}/devices:
+    get:
+      tags: [Devices]
+      summary: List devices in a project
+      operationId: listProjectDevices
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Devices returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceListApiResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Devices]
+      summary: Register a device with sensors
+      operationId: registerDevice
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCreateRequest'
+      responses:
+        '201':
+          description: Device registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/projects/{projectId}/devices/{deviceId}:
+    get:
+      tags: [Devices]
+      summary: Get a device and its sensors
+      operationId: getDevice
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Device returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceApiResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Devices]
+      summary: Delete a device
+      operationId: deleteDevice
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Device deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoidApiResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/telemetry:
+    get:
+      tags: [Telemetry]
+      summary: List telemetry
+      operationId: listTelemetry
+      parameters:
+        - name: deviceId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Telemetry returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryListApiResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Telemetry]
+      summary: Ingest telemetry
+      operationId: ingestTelemetry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryIngestRequest'
+      responses:
+        '201':
+          description: Telemetry accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    ProjectResponse:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    SensorCreateRequest:
+      type: object
+      required: [channelName]
+      properties:
+        channelName:
+          type: string
+          minLength: 1
+        unit:
+          type: string
+          nullable: true
+    DeviceCreateRequest:
+      type: object
+      required: [name, type, sensors]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        type:
+          type: string
+          minLength: 1
+        sensors:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SensorCreateRequest'
+    SensorResponse:
+      type: object
+      required: [id, channelName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        channelName:
+          type: string
+        unit:
+          type: string
+          nullable: true
+    DeviceResponse:
+      type: object
+      required: [id, projectId, name, type, status, registeredAt, sensors]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        registeredAt:
+          type: string
+          format: date-time
+        sensors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SensorResponse'
+    TelemetryIngestRequest:
+      type: object
+      required: [deviceId, capturedAt, payload]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        capturedAt:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties:
+            type: number
+    TelemetryResponse:
+      type: object
+      required: [id, deviceId, capturedAt, payload]
+      properties:
+        id:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        capturedAt:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties:
+            type: number
+    ProjectListApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectResponse'
+        timestamp:
+          type: string
+          format: date-time
+    ProjectApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/ProjectResponse'
+        timestamp:
+          type: string
+          format: date-time
+    DeviceListApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceResponse'
+        timestamp:
+          type: string
+          format: date-time
+    DeviceApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/DeviceResponse'
+        timestamp:
+          type: string
+          format: date-time
+    VoidApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          type: object
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+    TelemetryListApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TelemetryResponse'
+        timestamp:
+          type: string
+          format: date-time
+    TelemetryApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/TelemetryResponse'
+        timestamp:
+          type: string
+          format: date-time
+    ErrorApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        message:
+          type: string
+        data:
+          oneOf:
+            - type: array
+              items:
+                type: string
+            - type: object
+              nullable: true
+          description: Null for not-found and business-rule errors, or a list of validation messages.
+        timestamp:
+          type: string
+          format: date-time
+  responses:
+    BadRequest:
+      description: Request validation or business-rule failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorApiResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorApiResponse'
