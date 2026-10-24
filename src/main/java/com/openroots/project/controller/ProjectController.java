@@ -1,19 +1,20 @@
 package com.openroots.project.controller;
 
-import com.openroots.common.response.ApiResponse;
-import com.openroots.project.dto.ProjectResponse;
+import com.openroots.openapi.api.ProjectsApi;
+import com.openroots.openapi.model.ProjectApiResponse;
+import com.openroots.openapi.model.ProjectListApiResponse;
+import com.openroots.openapi.model.ProjectResponse;
 import com.openroots.project.model.ProjectEntity;
 import com.openroots.project.service.ProjectService;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/projects")
-public class ProjectController {
+public class ProjectController implements ProjectsApi {
 
     private final ProjectService projectService;
 
@@ -21,19 +22,33 @@ public class ProjectController {
         this.projectService = projectService;
     }
 
-    @GetMapping
-    public ApiResponse<List<ProjectResponse>> listProjects() {
-        return ApiResponse.success("Projects fetched", projectService.findAll().stream()
+    @Override
+    public ResponseEntity<ProjectListApiResponse> listProjects() {
+        List<ProjectResponse> projects = projectService.findAll().stream()
                 .map(this::toResponse)
-                .toList());
+                .toList();
+
+        return ResponseEntity.ok(new ProjectListApiResponse(
+                true,
+                "Projects fetched",
+                projects,
+                OffsetDateTime.now(ZoneOffset.UTC)));
     }
 
-    @GetMapping("/{projectId}")
-    public ApiResponse<ProjectResponse> getProject(@PathVariable UUID projectId) {
-        return ApiResponse.success("Project fetched", toResponse(projectService.findById(projectId)));
+    @Override
+    public ResponseEntity<ProjectApiResponse> getProject(UUID projectId) {
+        ProjectResponse project = toResponse(projectService.findById(projectId));
+        return ResponseEntity.ok(new ProjectApiResponse(
+                true,
+                "Project fetched",
+                project,
+                OffsetDateTime.now(ZoneOffset.UTC)));
     }
 
     private ProjectResponse toResponse(ProjectEntity project) {
-        return new ProjectResponse(project.getId(), project.getName(), project.getCreatedAt());
+        return new ProjectResponse(
+                project.getId(),
+                project.getName(),
+                project.getCreatedAt().atOffset(ZoneOffset.UTC));
     }
 }
