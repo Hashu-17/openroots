@@ -4,7 +4,10 @@
 .env
 frontend
 prompts
+plans
 docs
 architecture
+examples
 target
 *.md
+

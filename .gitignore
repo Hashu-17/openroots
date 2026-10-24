@@ -2,3 +2,7 @@
 .env.*
 !.env.example
 /target/
+/prompts/
+/plans/
+/architecture/
+/examples/
