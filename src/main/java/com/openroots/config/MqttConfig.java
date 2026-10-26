@@ -48,7 +48,6 @@ public class MqttConfig {
                 topic);
         adapter.setQos(1);
         adapter.setCompletionTimeout(5_000);
-        adapter.setRecoveryInterval(10_000);
         return adapter;
     }
 

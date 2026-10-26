@@ -6,8 +6,8 @@ import com.openroots.telemetry.dto.TelemetryIngestRequest;
 import com.openroots.telemetry.service.TelemetryService;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
-import org.springframework.integration.handler.GenericHandler;
-import org.springframework.messaging.Message;
+import org.springframework.integration.core.GenericHandler;
+import org.springframework.messaging.MessageHeaders;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -22,9 +22,9 @@ public class MqttTelemetryConsumer implements GenericHandler<Object> {
     }
 
     @Override
-    public Object handle(Object payload, Message<?> message) {
+    public Object handle(Object payload, MessageHeaders headers) {
         try {
-            String topic = String.valueOf(message.getHeaders().get("mqtt_receivedTopic"));
+            String topic = String.valueOf(headers.get("mqtt_receivedTopic"));
             UUID deviceId = deviceIdFromTopic(topic);
             JsonNode body = objectMapper.readTree(payload instanceof byte[] bytes
                     ? new String(bytes, StandardCharsets.UTF_8)
