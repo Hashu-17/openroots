@@ -1,6 +1,6 @@
 # Telemetry MQTT Contract
 
-> **Status:** Proposed for the first Go/MQTT integration. This is a wire contract to implement; the current application still ingests telemetry through the Spring HTTP API.
+> **Status:** Proposed contract for a future Go ingestion service. This branch already ingests MQTT telemetry through Spring, but its runtime behavior does not enforce every requirement below. See the current-state [C4 telemetry flow](c4-telemetry-ingestion.md) and the implementation notes in this document before treating a rule as implemented.
 
 ## MQTT topic
 
