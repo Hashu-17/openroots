@@ -9,7 +9,7 @@ type ProjectsIndexProps = {
   onOpenProject: (projectId: string) => void
 }
 
-// Present a timestamp in a shorter format that fits on a project card.
+// Shortenin the timestampformat
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }

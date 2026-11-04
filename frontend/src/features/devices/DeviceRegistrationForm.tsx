@@ -10,13 +10,11 @@ const starterSensors: SensorDraft[] = [
   { channelName: 'uv', unit: 'index' },
 ]
 
-// Props are the inputs this form receives from its parent screen.
 type DeviceRegistrationFormProps = {
   projectId: string
   onRegistered: () => Promise<void>
 }
 
-// This component owns the temporary values typed into the registration form.
 export default function DeviceRegistrationForm({ projectId, onRegistered }: DeviceRegistrationFormProps) {
   // Each useState call stores one value that can change while the user edits or submits the form.
   const [deviceName, setDeviceName] = useState('')
@@ -33,7 +31,7 @@ export default function DeviceRegistrationForm({ projectId, onRegistered }: Devi
     ))
   }
 
-  // Check the form, send the registration request, and show success or failure feedback.
+  
   async function submit(event: FormEvent<HTMLFormElement>) {
     // Prevent the browser from reloading the page when a form is submitted.
     event.preventDefault()
@@ -41,7 +39,7 @@ export default function DeviceRegistrationForm({ projectId, onRegistered }: Devi
     setNotice('')
     const names = sensors.map((sensor) => sensor.channelName.trim()).filter(Boolean)
 
-    // Stop before making a network request if required values are missing.
+  
     if (!projectId || !deviceName.trim() || !deviceType.trim() || names.length === 0) {
       setError('Enter a device name, type, and at least one sensor.')
       return
@@ -51,16 +49,16 @@ export default function DeviceRegistrationForm({ projectId, onRegistered }: Devi
       setError('Every sensor needs a channel name.')
       return
     }
-    // Channel names must be unique because they identify measurements within this device.
+   
     if (new Set(names).size !== names.length) {
       setError('Sensor channel names must be unique.')
       return
     }
 
-    // Show the saving state and disable the submit button while the request is in flight.
+    
     setSubmitting(true)
     try {
-      // Trim spaces and convert an empty unit to null before sending the JSON request.
+      //Trimming whitespace
       await api.registerDevice(projectId, {
         name: deviceName.trim(),
         type: deviceType.trim(),
@@ -69,23 +67,20 @@ export default function DeviceRegistrationForm({ projectId, onRegistered }: Devi
           unit: sensor.unit.trim() || null,
         })),
       })
-      // Tell the parent to refresh its device list so the new device appears immediately.
+      
       await onRegistered()
-      // Reset the form to its starting values after successful registration.
+      // Reset the form 
       setDeviceName('')
       setDeviceType('weather-station')
       setSensors(starterSensors.map((sensor) => ({ ...sensor })))
       setNotice('Device registered and saved to PostgreSQL.')
     } catch (cause) {
-      // Show a useful message whether the error came from the API or another failure.
       setError(cause instanceof Error ? cause.message : 'Unable to register device.')
     } finally {
-      // Re-enable the form whether the request succeeded or failed.
       setSubmitting(false)
     }
   }
 
-  // The form is controlled: input values come from React state and update state on each edit.
   return <form className="border border-[#2b3537] bg-[#171e20] pb-7" onSubmit={submit}>
     <div className="mb-7 border-b border-[#2b3537] px-5 py-5 sm:px-7">
       <p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#6f817f]">Add hardware</p>

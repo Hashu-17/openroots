@@ -2,6 +2,13 @@ import { LoaderCircle, Radio, Trash2 } from 'lucide-react'
 import DeviceRegistrationForm from './DeviceRegistrationForm'
 import type { Device } from '../../types/api'
 
+/* 
+  This view displays a list of devices and allows the user to register new devices or view telemetry data. 
+  It is used in the ProjectWorkspace view, which provides the selected project's data and actions.
+  It shows the device inventory on the left and the registration form on the right. 
+  It also shows a list of devices that can be selected to view their telemetry data. 
+*/
+
 // These props connect the device screen to data and actions owned by its parent.
 type DevicesViewProps = {
   projectId: string
