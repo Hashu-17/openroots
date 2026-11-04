@@ -1,4 +1,4 @@
-# Level 3: Frontend components 
+# Level 3:  Frontend components 
 
 This view describes the React frontend currently implemented on `spring-mqtt-ingestion`. It focuses on the main UI and API boundaries rather than individual presentational elements.
 
@@ -6,7 +6,7 @@ This view describes the React frontend currently implemented on `spring-mqtt-ing
 flowchart LR
     operator[Operator]
 
-    subgraph frontend[OpenRoots Control frontend · React application]
+    subgraph frontend[React Application]
         app[App<br/>application state and orchestration]
 
         subgraph project_views[Project views]

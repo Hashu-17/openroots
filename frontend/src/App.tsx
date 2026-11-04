@@ -1,15 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react' // I used 4 hooks here (react hooks are functions that let use React features in functional components)
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { api } from './api/client'
 import ProjectsIndex from './views/ProjectsIndex'
 import ProjectWorkspace from './views/ProjectWorkspace'
 import type { Device, Project, TelemetryRecord } from './types/api'
 
+/*  
+This is where the app starts. 
+It owns the data shared by multiple screens and decides which main screen is visible. (state management)
+The two main screens are the project index and project workspace for a single project. Each screen handles its own UI, but App manages the shared state and server communication.
+
+*/
+
 type View = 'projects' | 'project'
 
-// App owns data shared by multiple screens and decides which main screen is visible.
+
 export default function App() {
-  // Keep server data and screen status here so both project views can use the same state.
+//const [statevalue, setStateValue] = useState(initialValue) is a hook that lets you add state to functional components.
   const [projects, setProjects] = useState<Project[]>([])
   const [devices, setDevices] = useState<Device[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
@@ -24,12 +31,10 @@ export default function App() {
   const [telemetryLoading, setTelemetryLoading] = useState(false)
   const [telemetryError, setTelemetryError] = useState('')
   const loadedDevicesProjectId = useRef('')
-
-  // Look up the full project object for the selected ID; it can be undefined while data loads.
   const selectedProject = projects.find((project) => project.id === selectedProjectId)
 
-  // Load projects once when the app starts. The active flag ignores a late response after unmount.
-  useEffect(() => {
+
+  useEffect(() => {  
     let active = true
     async function loadProjects() {
       try {
@@ -48,8 +53,8 @@ export default function App() {
     return () => { active = false }
   }, [])
 
-  // Load or refresh devices for the currently selected project.
-  const reloadDevices = useCallback(async () => {
+
+  const reloadDevices = useCallback(async () => {  
     if (!selectedProjectId) {
       setDevices([])
       return
@@ -69,12 +74,9 @@ export default function App() {
     }
   }, [selectedProjectId])
 
-  // Fetch devices after opening a project or switching to another project.
-  useEffect(() => {
-    if (view === 'project' && selectedProjectId) void reloadDevices()
-  }, [reloadDevices, selectedProjectId, view])
+  
+  useEffect(() => { if (view === 'project' && selectedProjectId) void reloadDevices()}, [reloadDevices, selectedProjectId, view] )
 
-  // Move from the project list to the selected project's workspace and clear old feedback.
   function openProject(projectId: string) {
     setSelectedProjectId(projectId)
     setView('project')
@@ -82,8 +84,7 @@ export default function App() {
     setDevicesNotice('')
   }
 
-  // Load recent readings for the device the user chose in the inventory.
-  async function showTelemetry(device: Device) {
+  async function showTelemetry(device: Device) { 
     setTelemetryDevice(device)
     setTelemetry([])
     setTelemetryError('')
@@ -97,8 +98,7 @@ export default function App() {
     }
   }
 
-  // Ask for confirmation before permanently deleting a device and its related data.
-  async function deleteDevice(deviceId: string) {
+  async function deleteDevice(deviceId: string) { 
     const device = devices.find((item) => item.id === deviceId)
     if (!device || !window.confirm(`Delete ${device.name}? This permanently removes its sensors and telemetry.`)) return
     setDevicesError('')
@@ -112,7 +112,8 @@ export default function App() {
     }
   }
 
-  // App switches between the project index and workspace; each view handles its own screen UI.
+  // App switches between the project index and workspace only for now; each view handles its own screen UI.
+  //  !! pls change ternary logic to switch statement if more views are added in the future !!
   return <Tooltip.Provider delayDuration={300}><div className="min-h-screen bg-[#101416] text-[#e7ebe7]">
     <header className="border-b border-[#2a3335] bg-[#141a1c]">
       <div className="mx-auto flex min-h-[78px] max-w-[1280px] items-center justify-between px-6 sm:px-10">

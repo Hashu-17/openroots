@@ -22,7 +22,6 @@ function formatTimestamp(value: string) {
 
 // Display readings for one device, including loading, error, and no-data states.
 export default function TelemetryPanel({ deviceName, records, loading, error, onClose }: TelemetryPanelProps) {
-  // The parent supplies the selected device and data; this panel focuses on presentation.
   return <section className="mt-5 border border-[#36514c] bg-[#172825]">
     <div className="flex items-start justify-between gap-4 border-b border-[#36514c] px-5 py-5 sm:px-7">
       <div><p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#41c7a1]">Telemetry stream</p><h2 className="font-display text-xl font-bold text-[#f1f3ed]">{deviceName}</h2></div>

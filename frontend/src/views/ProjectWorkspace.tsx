@@ -5,6 +5,12 @@ import DevicesView from '../features/devices/DevicesView'
 import TelemetryPanel from '../TelemetryPanel'
 import type { Device, Project, TelemetryRecord } from '../types/api'
 
+/* We've reached the ProjectWorkspace view. This view displays the selected project's details and allows the user to interact with its devices and telemetry data.
+  The view is divided into tabs: Overview, Devices, Members, and Settings. 
+  The Overview tab shows a summary of the project, including the number of registered devices and sensor channels. 
+  The Devices tab displays the list of devices and allows the user to register new devices or view telemetry data. 
+  The Members and Settings tabs are placeholders for future functionality. */
+
 type ProjectTab = 'overview' | 'devices' | 'members' | 'settings'
 
 // Props provide the selected project's data and actions from App, where shared data is loaded.
@@ -28,19 +34,16 @@ type ProjectWorkspaceProps = {
   onCloseTelemetry: () => void
 }
 
-// Use the same date style in the project heading and list views.
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-// Members and settings are shown as unavailable until their backend features are implemented.
 function Unavailable({ title, description, icon }: { title: string; description: string; icon: React.ReactNode }) {
   return <div className="flex min-h-72 flex-col items-center justify-center border border-dashed border-[#394345] px-6 text-center"><span className="mb-4 text-[#6f817f]">{icon}</span><h2 className="font-display text-2xl font-bold text-[#e7ebe7]">{title}</h2><p className="mt-2 max-w-md text-sm text-[#82918e]">{description}</p></div>
 }
 
 // This view combines the selected project's header, tabs, summary, and feature screens.
 export default function ProjectWorkspace(props: ProjectWorkspaceProps) {
-  // The selected tab is local UI state; changing tabs does not need a backend request.
   const [tab, setTab] = useState<ProjectTab>('overview')
   const { projects, project, projectId, devices, devicesLoading, devicesError, devicesNotice, telemetryDevice, telemetry, telemetryLoading, telemetryError } = props
   const projectTabs: { id: ProjectTab; label: string; icon: typeof FolderKanban; available: boolean }[] = [

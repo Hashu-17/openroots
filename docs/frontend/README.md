@@ -1,8 +1,8 @@
 # Frontend developer guide
 
-The frontend is a React and TypeScript single-page application. Its current navigation is state-based: a user moves between the project index and a selected project's workspace. It does not use a routing library.
+The frontend is a React and TypeScript single-page application. Its current navigation is state based: a user moves between the project index and a selected project's workspace. It does not use a routing library.
 
-For a complete beginner-friendly walkthrough of every frontend file, function, hook, async request, API type, CSS rule, and build setting, see [frontend A-to-Z guide](docs/frontend-a-z-guide.md).
+For the complete codebase walkthrough of every frontend file, function, hook, async request, API type, CSS rule, and build setting, see [frontend A-to-Z guide](frontend-a-z-guide.md).
 
 ## Source map
 
@@ -16,7 +16,7 @@ src/
 │   └── api.ts                      Shared TypeScript shapes for projects, devices, and telemetry
 ├── views/
 │   ├── ProjectsIndex.tsx           Project list screen
-│   └── ProjectWorkspace.tsx         Selected-project header, tabs, and screen composition
+│   └── ProjectWorkspace.tsx        Selected-project header, tabs, and screen composition
 ├── features/
 │   └── devices/
 │       ├── DevicesView.tsx         Device inventory and telemetry selection UI

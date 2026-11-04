@@ -1,8 +1,8 @@
-# OpenRoots Frontend: A-to-Z Guide
+# OpenRoots Frontend: In Depth guide
 
 This guide explains the frontend as if you are learning the codebase from the beginning. It covers the files, functions, React concepts, asynchronous behavior, API calls, TypeScript types, CSS, and build configuration.
 
-The frontend is a React 19 single-page application written in TypeScript and bundled with Vite. It is an operations console for:
+The frontend is a React 19 single page application written in TypeScript and bundled with Vite. It  an operations console for:
 
 1. Listing projects.
 2. Opening one project.
@@ -10,7 +10,17 @@ The frontend is a React 19 single-page application written in TypeScript and bun
 4. Viewing device telemetry.
 5. Deleting devices.
 
-It currently does **not** implement routing, authentication, project creation, members, or settings.
+## Pre requisites
+
+- components (parent vs child) and JSX basics
+- states and props
+- conditional rendering 
+- hooks
+- async vs sync functions 
+
+Component level architecture was used for the react app separating view components from app.tsx under views/ , a separate api client under api/ , type definitions under types/
+
+> DevicesView is in features/ and not views/ because it represents a reusable component that can be used in multiple views, rather than being a top-level view itself.
 
 ## 1. Start here: how the browser reaches the application
 

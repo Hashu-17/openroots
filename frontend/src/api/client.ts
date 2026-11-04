@@ -7,18 +7,16 @@ import type {
 
 type ApiResponse<T> = { success: boolean; message: string; data: T }
 
-// Send one HTTP request and convert the backend's standard response envelope into usable data.
-// Screens call the named functions below instead of building fetch URLs themselves.
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  // All current API requests use JSON, so tell the backend how to read the request body.
+
   const response = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   })
+
   const rawBody = await response.text()
   let body: ApiResponse<T> | undefined
 
-  // Read text first so that empty responses and invalid JSON can be handled consistently.
   try {
     body = rawBody ? (JSON.parse(rawBody) as ApiResponse<T>) : undefined
   } catch {
@@ -26,16 +24,15 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   }
 
   if (!response.ok || !body?.success) {
-    // Validation failures may return a list of field messages in the data field.
     const details = Array.isArray(body?.data) ? `: ${body.data.join(', ')}` : ''
     throw new Error(`${body?.message || `Backend request failed (${response.status}).`}${details}`)
   }
-
   return body.data
+  
 }
 
+// Each function below represents one backend endpoint used by the frontend.
 export const api = {
-  // Each function below represents one backend endpoint used by the frontend.
   listProjects: () => request<Project[]>('/api/v1/projects'),
   listProjectDevices: (projectId: string) =>
     request<Device[]>(`/api/v1/projects/${projectId}/devices`),

@@ -1,16 +1,12 @@
 # OpenRoots
 
-The platform can currently manage projects, registered devices, and telemetry. The current backend exposes a versioned REST API, with an MQTT path for device telemetry.
+Our platform can currently manage projects, registered devices, and telemetry ingestion and display. 
 
 ## Features
-- Create and manage operational projects.
+- Create and manage  projects.
 - Register physical devices under a project.
 - Configure multiple sensor channels for each device.
-- Ingest device telemetry through MQTT.
-- Persist telemetry in PostgreSQL/TimescaleDB.
-- View projects, devices, sensors, and telemetry from the React web interface.
-- Access project, device, and telemetry resources through a versioned REST API.
-- Validate device registrations and return structured API error responses.
+- View projects, devices, sensors, and telemetry from the web interface.
 
 ## System Requirements
 - Java 21 or newer.

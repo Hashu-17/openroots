@@ -11,15 +11,19 @@ The root-level `architecture/` folder contains earlier exploratory diagrams, inc
 ## C4 views ( Diagrams )
 The views follow the [C4 Model](https://c4model.com/) levels and element categories, rendered with standard Mermaid flowcharts and a sequence diagrams. Mermaid's dedicated C4 renderer is experimental and offers limited layout control.
 
-1. [System context (C1)](c4-system-context.md) — people, devices, and the OpenRoots system boundary.
-2. [Containers (C2)](c4-containers.md) — the frontend, Spring backend, MQTT broker, and TimescaleDB.
+1. [System context (C1)](c4-system-context.md) — Start here.
+2. [Containers (C2)](c4-containers.md) —  frontend, backend, MQTT broker, and DB.
 3. [Backend components (C3)](c4-backend-components.md) — API adapters, application services, MQTT ingestion, and persistence.
 4. [Frontend components (C3)](c4-frontend-components.md) — React views, device registration, application state, and the API client.
-5. [Telemetry Ingestion (dynamic view)](c4-telemetry-ingestion.md) — the runtime path from an MQTT publish to storage.
-6.  [Request Paths (dynamic view)](c4-request-paths.md) — User request path flows from dashboard
-7. [Local Deployment](c4-local-deployment.md) — how docker containers are deployed for local development.
-8. [Domain data model](data-model.md) — relational entities, relationships, constraints, and implementation status.
+5. [ Ingress Flow (dynamic view)](ingress-flow.md) — proposed client, REST, MQTT, authentication, and application-module paths spanning C2 and C3 abstractions.
+6. [Request Paths (dynamic view)](c4-request-paths.md) — proposed dashboard request paths involving the Spring business API and future Go telemetry API.
+7. [Telemetry Ingestion (dynamic view)](c4-telemetry-ingestion.md) — the runtime path from an MQTT publish to storage.
+8. [Local Deployment](c4-local-deployment.md) — how the containers are deployed for local development.
+9. [Domain data model](data-model.md) — relational entities, relationships, constraints, and implementation status.
+
 >Update the relevant C4 views when a container, dependency, boundary, or important responsibility changes. Keep diagrams at the level useful to their audience; a code-level class diagram is optional and should not duplicate generated Javadoc or TypeDoc output.
+
+
 
 
 
@@ -46,6 +50,5 @@ PostgreSQL and TimescaleDB describe the data technologies and ownership boundari
 - Telemetry is stored in TimescaleDB/PostgreSQL.
 - `SecurityConfig` currently permits all HTTP requests. The JWT and project-membership rules in [authentication design](../security/authentication.md) are target design, not active enforcement.
 - The [telemetry MQTT contract](../contracts/mqtt-telemetry.md) contains design requirements that are stricter than some current runtime checks. Treat that document's stated status and scope as part of the contract; do not assume every listed validation is already enforced.
-
 
 
