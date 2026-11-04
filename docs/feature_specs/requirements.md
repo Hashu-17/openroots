@@ -2,9 +2,9 @@
 
 ## Product
 
-OpenRoots is a self-hosted IoT platform for registering devices, receiving telemetry, sending commands, and exposing device data to web or mobile clients.
+Our platform currently supports project creation, registering of devices, receiving telemetry from registered devices and exposing live telemetry data to a web client.
 
-## Version 1 requirements
+## Version 1
 
 - The backend exposes a versioned REST API under `/api/v1`.
 - Users can authenticate with an email address and password.
@@ -16,7 +16,7 @@ OpenRoots is a self-hosted IoT platform for registering devices, receiving telem
 - Passwords and device secrets are never stored in plaintext.
 - Invalid requests return structured error responses.
 
-## Phase 4 scope
+## Auth Scope
 
 - User registration and login.
 - Stateless JWT access tokens.
@@ -26,10 +26,9 @@ OpenRoots is a self-hosted IoT platform for registering devices, receiving telem
 
 Certificates are explicitly deferred until a later phase.
 
-## Non-goals for Phase 4
+## Extended Goals
 
 - Refresh-token rotation.
-- Social login.
 - Multi-factor authentication.
 - Certificate-based device authentication.
 - Fine-grained per-field permissions.
