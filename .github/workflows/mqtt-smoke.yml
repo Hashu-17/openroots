@@ -18,7 +18,11 @@ jobs:
       - name: Create Python environment and install MQTT client
         shell: cmd
         run: |
-          python -m venv .venv-mqtt-smoke
+          if not exist "%USERPROFILE%\anaconda3\python.exe" (
+            echo Python not found at %USERPROFILE%\anaconda3\python.exe
+            exit /b 1
+          )
+          "%USERPROFILE%\anaconda3\python.exe" -m venv .venv-mqtt-smoke
           .venv-mqtt-smoke\Scripts\python.exe -m pip install -r examples/requirements-mqtt.txt
       - name: Publish telemetry and verify backend persistence
         shell: cmd
