@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -22,6 +23,24 @@ def required_env(name: str) -> str:
     if not value:
         raise ValueError(f"required environment variable is missing: {name}")
     return value
+
+
+def load_local_env() -> None:
+    """Load examples/.env for local runs without overriding workflow variables."""
+    env_file = Path(__file__).with_name(".env")
+    if not env_file.is_file():
+        return
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        name = name.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        if name:
+            os.environ.setdefault(name, value)
 
 
 def telemetry_visible(api_url: str, device_id: str, captured_at: datetime, channel: str, value: float) -> bool:
@@ -37,6 +56,7 @@ def telemetry_visible(api_url: str, device_id: str, captured_at: datetime, chann
 
 
 def main() -> int:
+    load_local_env()
     try:
         device_id = str(uuid.UUID(required_env("MQTT_SMOKE_DEVICE_ID")))
         password = required_env("MQTT_SMOKE_DEVICE_PASSWORD")
