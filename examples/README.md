@@ -18,18 +18,19 @@ publisher-side MQTT acknowledgement latency.
    writes telemetry rows.
 2. Save the registered UUIDs, one per line, in `examples/load-devices.txt`.
    Lines beginning with `#` and blank lines are ignored.
-3. In the local broker, create a publisher client for each UUID, using that
-   UUID as its MQTT username and the same password for each. The broker's
-   `device-publisher` role limits each username to its matching device topic.
-   For each UUID, run these commands, replacing the placeholders:
+3. Copy `examples/.env.example` to `examples/.env`, set the device UUID and a
+   test password, then provision the broker account with one script:
 
    ```powershell
-   docker compose exec mosquitto mosquitto_ctrl -h 127.0.0.1 -u openroots-admin -P ADMIN_PASSWORD dynsec createClient DEVICE_UUID -p DEVICE_PASSWORD
-   docker compose exec mosquitto mosquitto_ctrl -h 127.0.0.1 -u openroots-admin -P ADMIN_PASSWORD dynsec addClientRole DEVICE_UUID device-publisher
+   Copy-Item examples/.env.example examples/.env
+   notepad examples/.env
+   .\examples\provision_mqtt_device.ps1
    ```
 
-   Use the admin username/password from your local `.env`. Keep these test
-   credentials on the development broker; do not reuse the admin password.
+   The script creates a Mosquitto client whose username is the device UUID and
+   assigns it the `device-publisher` role. It reads broker admin credentials
+   inside the Mosquitto container, so you do not need to enter them. Keep the
+   test password in this ignored local `.env`; do not reuse the admin password.
 4. Install the Python dependency and set the shared test-device password:
 
    ```powershell
@@ -106,34 +107,84 @@ and stack are on the same PC, so its MQTT port and API are reachable at
    configure it as a Windows service for an always-on runner. Confirm GitHub
    shows it as **Idle/Online**. The workflow targets the labels
    `self-hosted`, `Windows`, `X64`, and `openroots-smoke`.
-4. Start the OpenRoots stack from the repository directory:
+4. Start the OpenRoots stack from the repository root (`E:\OpenRoots` in
+   your checkout):
 
    ```powershell
    docker compose up -d --build
+   docker compose ps
    ```
 
-   In the app, select a project and register one device with a numeric sensor
-   channel named `temperature` (or change `MQTT_SMOKE_CHANNEL` in the workflow
-   to the actual channel name).
-5. Provision that device's MQTT account on the local development broker. Its
-   MQTT username must equal the registered device UUID because this broker's
-   publisher ACL binds the topic UUID to `%u`. Create the client with a unique
-   test password and attach the existing `device-publisher` role. For example,
-   replace the uppercase placeholders with your local values:
+   Wait until the services are running. Check the backend at
+   `http://localhost:8080/actuator/health`, then open the app at
+   `http://localhost:5173`.
+5. Select an existing project in the app. If the list is empty, this version
+   of the app cannot create projects in the UI (the **New project** button is
+   disabled). Create a local test project from PowerShell instead:
 
    ```powershell
-   docker compose exec mosquitto mosquitto_ctrl -h 127.0.0.1 -u openroots-admin -P ADMIN_PASSWORD dynsec createClient DEVICE_UUID -p DEVICE_PASSWORD
-   docker compose exec mosquitto mosquitto_ctrl -h 127.0.0.1 -u openroots-admin -P ADMIN_PASSWORD dynsec addClientRole DEVICE_UUID device-publisher
+   docker compose exec database psql -U iot_backend -d iot_backend -c "INSERT INTO project (name) VALUES ('MQTT Smoke Test') RETURNING id;"
    ```
 
-6. In GitHub repository settings, open **Secrets and variables → Actions** and
-   add repository secrets `MQTT_SMOKE_DEVICE_ID` (the registered UUID) and
-   `MQTT_SMOKE_DEVICE_PASSWORD` (the device account password). Do not put
-   either value in the workflow file or commit them.
-7. Push `.github/workflows/mqtt-smoke.yml` and the `examples/` smoke test
-   files to GitHub. In the **Actions** tab, select **MQTT smoke test → Run
-   workflow**. A passing run means the broker acknowledged the message and the
-   backend API returned the same timestamped reading from the database.
+   This command uses the sample `.env` database/user values. If yours differ,
+   replace `iot_backend` with your `POSTGRES_USER` and `POSTGRES_DB` values
+   from `.env`. Reload the app and select the new project.
+6. In the project, use **Devices → Register a device**. Enter a device name
+   and type. The form starts with `temperature`, `rain`, and `uv` sensors; keep
+   `temperature` (unit `C`) for this smoke test. Submit, then copy the device
+   UUID shown on the device card. The workflow sends a numeric value for the
+   exact channel name `temperature`.
+7. Copy `examples/.env.example` to `examples/.env`, put the registered device
+   UUID and a unique test password in it, then run the provisioning script:
+
+   ```powershell
+   Copy-Item examples/.env.example examples/.env
+   notepad examples/.env
+   .\examples\provision_mqtt_device.ps1
+   ```
+
+   The script creates the MQTT username from the device UUID and assigns the
+   `device-publisher` role. It reads the admin credentials from the broker
+   container. `examples/.env` is ignored by Git; keep it local.
+8. Add two GitHub repository secrets. Go to the GitHub repo's **Settings →
+   Secrets and variables → Actions → New repository secret** and create:
+
+   - `MQTT_SMOKE_DEVICE_ID` — the device UUID you copied from the app.
+   - `MQTT_SMOKE_DEVICE_PASSWORD` — the password set in `examples/.env` and used by the provisioning script.
+
+   Do not put either value in the workflow file or commit them.
+9. Push the workflow and scripts to GitHub. From the repository root:
+
+   ```powershell
+   git add .github/workflows/mqtt-smoke.yml examples/README.md examples/.env.example examples/mqtt_smoke_test.py examples/mqtt_load_test.py examples/requirements-mqtt.txt .gitignore README.md
+   git commit -m "Add GitHub MQTT smoke test"
+   git push
+   ```
+
+   In the GitHub repo, open **Actions → MQTT smoke test → Run workflow**. A
+   passing run means the broker acknowledged the publish and the backend API
+   returned that exact reading from PostgreSQL.
+
+### Where the scripts live
+
+- `.github/workflows/mqtt-smoke.yml` — GitHub workflow definition. It creates
+  the Python virtual environment and runs the smoke script on your Windows
+  self-hosted runner.
+- `examples/mqtt_smoke_test.py` — publishes one reading and polls the backend
+  telemetry API until that reading is stored.
+- `examples/provision_mqtt_device.ps1` — creates the local broker client from
+  `examples/.env` and assigns its publisher role.
+- `examples/requirements-mqtt.txt` — Python MQTT client dependency installed
+  by the workflow.
+- `examples/mqtt_load_test.py` — the separate continuous multi-device test for
+  later; the smoke workflow does not run this script.
+- `examples/README.md` — setup and run guide.
+
+For a local command-line smoke run, copy `examples/.env.example` to
+`examples/.env`, fill in the device UUID and MQTT password, then run
+`python examples/mqtt_smoke_test.py` from the repository root. The real
+`examples/.env` is ignored by Git. GitHub Actions uses the two repository
+secrets instead of this local file.
 
 This is a self-hosted runner, so only run workflow code you trust on this PC.
 The smoke test writes one telemetry reading each time. It is manual-only so a
