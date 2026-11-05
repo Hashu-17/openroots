@@ -1,6 +1,9 @@
 name: MQTT smoke test
 
 on:
+  push:
+    branches:
+      - spring-mqtt-ingestion
   workflow_dispatch:
 
 permissions:
