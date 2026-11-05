@@ -12,6 +12,7 @@ The frontend is a React 19 single page application written in TypeScript and bun
 
 ## Pre requisites
 
+please do read up on these beforehand
 - components (parent vs child) and JSX basics
 - states and props
 - conditional rendering 

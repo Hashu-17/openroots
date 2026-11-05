@@ -42,3 +42,4 @@ The Compose stack starts the database, MQTT broker, Spring Boot backend, and fro
 ## Documentation
 
 - The in depth documentation - [Complete Documentation](docs/README.md)
+- [MQTT smoke and fleet load tests](examples/README.md) — run a GitHub Actions end-to-end smoke test or simulate a fleet publishing telemetry.

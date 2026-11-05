@@ -6,3 +6,10 @@
 /plans/
 /architecture/
 /examples/
+!/examples/
+/examples/*
+!/examples/README.md
+!/examples/mqtt_load_test.py
+!/examples/mqtt_smoke_test.py
+!/examples/requirements-mqtt.txt
+/.venv-mqtt-smoke/
