@@ -3,7 +3,10 @@
 !.env.example
 /target/
 /prompts/
-/plans/
+/plans/*
+!/plans/testing/
+!/plans/testing/**
 /architecture/
 /examples/raspberry_pi/
 /.venv-mqtt-smoke/
+/examples/load-devices.txt

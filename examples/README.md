@@ -12,31 +12,37 @@ publisher-side MQTT acknowledgement latency.
 
 ## Prepare a local test fleet
 
-1. Start the local stack with `docker compose up --build` and register test
-   devices in the app. Give every test device the same numeric sensor channel
-   (the default is `temperature`). Use a development database because the run
-   writes telemetry rows.
-2. Save the registered UUIDs, one per line, in `examples/load-devices.txt`.
-   Lines beginning with `#` and blank lines are ignored.
-3. Copy `examples/.env.example` to `examples/.env`, set the device UUID and a
-   test password, then provision the broker account with one script:
+Use a disposable development/test database. Fleet setup calls the existing
+device-registration API and creates ordinary test records; it does not need a
+schema change or a migration. The same setup works in PowerShell and bash.
 
-   ```powershell
-   Copy-Item examples/.env.example examples/.env
-   notepad examples/.env
-   .\examples\provision_mqtt_device.ps1
-   ```
-
-   The script creates a Mosquitto client whose username is the device UUID and
-   assigns it the `device-publisher` role. It reads broker admin credentials
-   inside the Mosquitto container, so you do not need to enter them. Keep the
-   test password in this ignored local `.env`; do not reuse the admin password.
-4. Install the Python dependency and set the shared test-device password:
+1. Start the local stack with `docker compose up -d --build` and make sure the
+   broker, backend, and database are healthy.
+2. Copy `examples/.env.example` to `examples/.env` and set
+   `OPENROOTS_MQTT_DEVICE_PASSWORD` to a test-only password. Keep it out of
+   source control and do not reuse a broker admin or real device password.
+3. Find the UUID of an existing test project in the OpenRoots UI or from
+   `GET http://127.0.0.1:8080/api/v1/projects`. Install the MQTT Python
+   dependency, then create or reuse a 100-device fleet:
 
    ```powershell
    python -m pip install -r examples/requirements-mqtt.txt
-   $env:OPENROOTS_MQTT_DEVICE_PASSWORD = "DEVICE_PASSWORD"
+   python examples/provision_mqtt_fleet.py --project-id PROJECT_UUID --count 100
    ```
+
+   The script gives devices stable names (`openroots-load-test-001`, etc.),
+   registers a numeric `temperature` sensor, provisions each UUID as its MQTT
+   username with the shared test password, and writes their UUIDs to the
+   ignored `examples/load-devices.txt`. Re-running it reuses devices with
+   those names and resets their broker password. Broker admin credentials are
+   read inside the Mosquitto container. Change `--name-prefix` to create a
+   separate fleet.
+
+   The script provisions the test fleet in the local development database
+   selected by the running backend. Use a separate disposable test database
+   when you need to keep ordinary development data isolated. Flyway applies
+   existing migrations when the backend starts; do not add a migration just
+   to create test devices.
 
 ## Run
 
@@ -45,6 +51,10 @@ From the repository root:
 ```powershell
 python examples/mqtt_load_test.py --devices examples/load-devices.txt --period 10 --duration 300
 ```
+
+The load-test script reads `OPENROOTS_MQTT_DEVICE_PASSWORD` and broker/API
+settings from `examples/.env` for local runs. Environment variables override
+that file.
 
 To publish multiple channels, repeat `--channel` with names registered on
 every device:
@@ -88,11 +98,17 @@ and stack are on the same PC, so its MQTT port and API are reachable at
 ### Requirements
 
 - Windows 10/11 PC with Git installed and available on `PATH`.
-- Python 3.10+ installed for all users, with the `py` launcher available.
+- Anaconda Python installed in the runner user's profile at
+  `%USERPROFILE%\anaconda3\python.exe`. The workflow invokes this executable
+  directly because the runner job does not resolve Conda's `PATH`.
 - Docker Desktop running Linux containers, with Docker Compose v2 available.
 - A GitHub repository where Actions are enabled, plus an internet connection
   for the runner to connect outbound to GitHub and for the workflow to install
   `paho-mqtt` from PyPI. The runner needs no inbound port forwarding.
+
+Check that the runner account can access
+`%USERPROFILE%\anaconda3\python.exe`. The current workflow expects that Anaconda
+installation path when creating its virtual environment.
 
 ### Install and register a Windows runner
 
@@ -174,6 +190,9 @@ and stack are on the same PC, so its MQTT port and API are reachable at
   telemetry API until that reading is stored.
 - `examples/provision_mqtt_device.ps1` — creates the local broker client from
   `examples/.env` and assigns its publisher role.
+- `examples/provision_mqtt_fleet.py` — idempotently creates/reuses a fleet via
+  the existing API, provisions matching broker clients, and writes the UUID
+  list for the load test.
 - `examples/requirements-mqtt.txt` — Python MQTT client dependency installed
   by the workflow.
 - `examples/mqtt_load_test.py` — the separate continuous multi-device test for

@@ -12,8 +12,27 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 
 import paho.mqtt.client as mqtt
+
+
+def load_local_env() -> None:
+    """Load examples/.env for local runs without overriding workflow variables."""
+    env_file = Path(__file__).with_name(".env")
+    if not env_file.is_file():
+        return
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        name = name.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '\"'):
+            value = value[1:-1]
+        if name:
+            os.environ.setdefault(name, value)
 
 
 @dataclass
@@ -57,6 +76,7 @@ def percentile(values: list[float], fraction: float) -> float:
 
 
 def main() -> int:
+    load_local_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--devices", required=True, help="text file with one registered device UUID per line")
     parser.add_argument("--host", default=os.getenv("OPENROOTS_MQTT_HOST", "127.0.0.1"))
