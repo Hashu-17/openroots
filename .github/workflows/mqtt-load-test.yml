@@ -61,9 +61,14 @@ jobs:
       - name: Confirm local OpenRoots stack is running
         shell: cmd
         run: |
-          docker inspect --format "{{.State.Running}}" openroots-mosquitto | findstr /x true >nul
-          if errorlevel 1 (
-            echo Mosquitto container openroots-mosquitto is not running. Start the local OpenRoots Compose stack first.
+          set "MOSQUITTO_RUNNING="
+          for /f "delims=" %%S in ('docker inspect --format "{{.State.Running}}" openroots-mosquitto 2^>nul') do set "MOSQUITTO_RUNNING=%%S"
+          if /i not "%MOSQUITTO_RUNNING%"=="true" (
+            echo This runner's Docker context does not see openroots-mosquitto as running.
+            echo Docker context:
+            docker context show
+            echo Containers visible to this runner:
+            docker ps -a --format "table {{.Names}}\t{{.Status}}"
             exit /b 1
           )
           curl.exe --fail --silent --show-error http://127.0.0.1:8080/actuator/health >nul
