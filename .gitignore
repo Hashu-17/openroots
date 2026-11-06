@@ -9,4 +9,5 @@
 /architecture/
 /examples/raspberry_pi/
 /.venv-mqtt-smoke/
+/.venv-mqtt-load/
 /examples/load-devices.txt

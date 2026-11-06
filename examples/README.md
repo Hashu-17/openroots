@@ -208,3 +208,23 @@ secrets instead of this local file.
 This is a self-hosted runner, so only run workflow code you trust on this PC.
 The smoke test writes one telemetry reading each time. It is manual-only so a
 push does not write test data automatically.
+
+## GitHub Actions load test
+
+`.github/workflows/mqtt-load-test.yml` runs on pushes to
+`spring-mqtt-ingestion` and can also be manually dispatched. It uses the same
+Windows self-hosted runner and checks that the local Mosquitto container and
+backend are already running. A branch push creates/reuses 100 devices and
+runs them at a 10-second period for 5 minutes. Manual runs let you adjust the
+fleet size, broker host/port, period, and duration. The project is found from
+the existing `MQTT_SMOKE_DEVICE_ID` secret unless you enter a project UUID.
+The workflow uses `MQTT_SMOKE_DEVICE_PASSWORD` as the shared test-fleet
+password; no per-device GitHub secrets or local `examples/.env` are needed for
+Actions.
+
+The workflow installs its Python dependency in a fresh virtual environment
+because GitHub Actions checks out the code into its workspace for each run.
+That replaces the manual `pip install` command; it is not something you need
+to run separately. The broker host and port default to the current Windows
+setup (`192.168.29.147:1883`); adjust the manual-run inputs when the Docker
+published endpoint changes.

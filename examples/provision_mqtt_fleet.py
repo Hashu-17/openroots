@@ -12,9 +12,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 
-ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_FILE = Path(__file__).resolve().parent / ".env"
 DEFAULT_DEVICE_FILE = Path(__file__).resolve().parent / "load-devices.txt"
 
@@ -53,6 +53,25 @@ def api_json(base_url: str, path: str, method: str = "GET", body: dict[str, Any]
         raise RuntimeError(f"Could not reach OpenRoots API: {error.reason}") from error
 
 
+def project_for_device(base_url: str, device_id: str) -> str:
+    try:
+        wanted_id = str(UUID(device_id))
+    except ValueError as error:
+        raise RuntimeError("MQTT_SMOKE_DEVICE_ID must be a valid UUID to find the test project") from error
+    projects = api_json(base_url, "/api/v1/projects").get("data", [])
+    for project in projects:
+        project_id = project.get("id")
+        if not project_id:
+            continue
+        devices = api_json(base_url, f"/api/v1/projects/{project_id}/devices").get("data", [])
+        if any(device.get("id") == wanted_id for device in devices):
+            return str(UUID(project_id))
+    raise RuntimeError(
+        f"Could not find smoke-test device {wanted_id} in any project. "
+        "Pass --project-id explicitly or check the MQTT_SMOKE_DEVICE_ID secret."
+    )
+
+
 def provision_broker_client(device_id: str, password: str) -> None:
     # Send the password over stdin, rather than placing it in the docker command
     # line where local process-listing tools could expose it.
@@ -69,8 +88,7 @@ else
 fi
 '''
     result = subprocess.run(
-        ["docker", "compose", "exec", "-T", "mosquitto", "sh", "-c", script, "sh", device_id],
-        cwd=ROOT,
+        ["docker", "exec", "-i", "openroots-mosquitto", "sh", "-c", script, "sh", device_id],
         input=password + "\n",
         text=True,
         capture_output=True,
@@ -90,9 +108,9 @@ def save_device_file(path: Path, device_ids: list[str]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--project-id", required=True, help="existing OpenRoots project UUID")
+    parser.add_argument("--project-id", help="existing OpenRoots project UUID; inferred from the smoke device if omitted")
     parser.add_argument("--count", type=int, default=100, help="number of virtual devices to create/reuse")
-    parser.add_argument("--api-url", default=os.getenv("OPENROOTS_API_URL", "http://127.0.0.1:8080"))
+    parser.add_argument("--api-url", help="OpenRoots backend URL (defaults to examples/.env or localhost)")
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE,
                         help="ignored local env file containing OPENROOTS_MQTT_DEVICE_PASSWORD")
     parser.add_argument("--output", type=Path, default=DEFAULT_DEVICE_FILE,
@@ -113,10 +131,23 @@ def main() -> int:
     if not password:
         parser.error(f"set OPENROOTS_MQTT_DEVICE_PASSWORD in the environment or {args.env_file}")
 
-    project_id = args.project_id.strip()
+    api_url = args.api_url or os.getenv("OPENROOTS_API_URL") or env_file_values.get(
+        "OPENROOTS_API_URL", "http://127.0.0.1:8080"
+    )
+    requested_project_id = (args.project_id or os.getenv("OPENROOTS_PROJECT_ID") or "").strip()
+    if requested_project_id:
+        try:
+            project_id = str(UUID(requested_project_id))
+        except ValueError:
+            parser.error("--project-id must be a valid UUID")
+    else:
+        reference_device_id = os.getenv("MQTT_SMOKE_DEVICE_ID")
+        if not reference_device_id:
+            parser.error("pass --project-id or set MQTT_SMOKE_DEVICE_ID so the project can be found")
+        project_id = project_for_device(api_url, reference_device_id)
     devices_path = f"/api/v1/projects/{project_id}/devices"
     print(f"Checking existing test devices in project {project_id}...")
-    devices_response = api_json(args.api_url, devices_path)
+    devices_response = api_json(api_url, devices_path)
     existing = {
         device["name"]: device
         for device in devices_response.get("data", [])
@@ -128,7 +159,7 @@ def main() -> int:
         name = f"{args.name_prefix}-{index:03d}"
         device = existing.get(name)
         if device is None:
-            created = api_json(args.api_url, devices_path, "POST", {
+            created = api_json(api_url, devices_path, "POST", {
                 "name": name,
                 "type": "mqtt-load-test",
                 "sensors": [{"channelName": args.channel, "unit": args.unit}],
