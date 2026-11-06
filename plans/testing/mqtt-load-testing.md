@@ -23,6 +23,11 @@ database commit.
   rate, and mean, p95, and maximum PUBACK latency. PUBACK means the broker
   accepted the message. The script does not currently verify every message
   was persisted, report p99, or capture server CPU and memory.
+- `examples/provision_mqtt_fleet.py` now creates or reuses test devices through
+  the registration API, provisions their Mosquitto accounts, and writes the
+  device UUID manifest. It uses the existing schema, so fleet setup needs no
+  migration. Use a disposable development/test database to keep generated
+  devices and telemetry separate from production data.
 - The backend includes Spring Boot Actuator, but current configuration exposes
   only `health` and `info`; Prometheus metrics and MQTT ingestion counters are
   not configured. See `pom.xml` and `src/main/resources/application.yml`.
