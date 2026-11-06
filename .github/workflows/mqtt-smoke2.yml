@@ -1,9 +1,7 @@
 name: MQTT smoke test (Linux)
 
 on:
-  push:
-    branches:
-      - spring-mqtt-ingestion
+  
   workflow_dispatch:
 
 permissions:
