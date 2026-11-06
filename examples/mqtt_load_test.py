@@ -83,13 +83,15 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=int(os.getenv("OPENROOTS_MQTT_PORT", "1883")))
     parser.add_argument("--period", type=float, default=10.0, help="seconds between each device's messages")
     parser.add_argument("--duration", type=float, default=120.0, help="test duration in seconds")
+    parser.add_argument("--connect-timeout", type=float, default=15.0,
+                        help="maximum seconds to wait for each broker CONNACK")
     parser.add_argument("--qos", type=int, choices=(0, 1, 2), default=1)
     parser.add_argument("--channel", action="append", dest="channels",
                         help="registered numeric sensor channel; repeat to send multiple readings")
     args = parser.parse_args()
 
-    if args.period <= 0 or args.duration <= 0:
-        parser.error("--period and --duration must be greater than zero")
+    if args.period <= 0 or args.duration <= 0 or args.connect_timeout <= 0:
+        parser.error("--period, --duration, and --connect-timeout must be greater than zero")
     device_ids = read_device_ids(args.devices)
     channels = args.channels or ["temperature"]
     password = os.getenv("OPENROOTS_MQTT_DEVICE_PASSWORD")
@@ -106,6 +108,8 @@ def main() -> int:
     print(f"Connecting {len(device_ids)} devices to {args.host}:{args.port} (QoS {args.qos})...")
     try:
         for device_id in device_ids:
+            connack_received = threading.Event()
+            connection_result: list[tuple[bool, str]] = []
             client = mqtt.Client(
                 mqtt.CallbackAPIVersion.VERSION2,
                 client_id=f"openroots-load-{device_id}",
@@ -113,15 +117,31 @@ def main() -> int:
                 clean_session=True,
             )
             client.username_pw_set(device_id, password)
+
+            def on_connect(client, userdata, flags, reason_code, properties,
+                           received=connack_received, result=connection_result):
+                result.append((reason_code.is_failure, str(reason_code)))
+                received.set()
+
+            client.on_connect = on_connect
             client.connect(args.host, args.port, keepalive=30)
             client.loop_start()
             clients.append((device_id, client))
+            if not connack_received.wait(args.connect_timeout):
+                raise TimeoutError(f"{device_id}: timed out waiting for broker CONNACK")
+            if not connection_result or connection_result[-1][0]:
+                reason = connection_result[-1] if connection_result else "no CONNACK received"
+                if isinstance(reason, tuple):
+                    reason = reason[1]
+                raise ConnectionError(f"{device_id}: broker rejected MQTT connection ({reason})")
     except Exception as error:
         for _, client in clients:
             client.disconnect()
             client.loop_stop()
         print(f"Connection failed: {error}")
         return 2
+
+    print(f"Broker connections accepted: {len(clients)}/{len(device_ids)}")
 
     def publish_loop(device_id: str, client: mqtt.Client) -> None:
         topic = f"openroots/v1/devices/{device_id}/telemetry"
@@ -139,7 +159,7 @@ def main() -> int:
                 sent_at = time.perf_counter()
                 info = client.publish(topic, body, qos=args.qos, retain=False)
                 if info.rc != mqtt.MQTT_ERR_SUCCESS:
-                    results.record(None, f"{device_id}: publish returned rc={info.rc}")
+                    results.record(None, f"{device_id}: publish returned rc={info.rc} ({mqtt.error_string(info.rc)})")
                 else:
                     try:
                         info.wait_for_publish(timeout=max(5.0, args.period))
