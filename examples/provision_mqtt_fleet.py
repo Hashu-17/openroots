@@ -115,12 +115,14 @@ printf '%s\n' "$DETAILS" | grep -Fq 'device-publisher'
 '''
     result = subprocess.run(
         ["docker", "exec", "-i", "openroots-mosquitto", "sh", "-c", script, "sh", device_id],
-        input=password + "\n",
-        text=True,
+        # Use bytes: text-mode stdin translates ``\n`` to ``\r\n`` on Windows.
+        # The container's ``read`` would then retain ``\r`` in the password,
+        # so the broker would store a different password than Paho later uses.
+        input=password.encode("utf-8") + b"\n",
         capture_output=True,
         check=False,
     )
-    response = f"{result.stdout}{result.stderr}"
+    response = (result.stdout + result.stderr).decode("utf-8", errors="replace")
     if result.returncode or "Error:" in response:
         detail = response.strip() or "docker compose exec failed"
         raise RuntimeError(f"Could not provision broker account for {device_id}: {detail}")
@@ -189,6 +191,8 @@ def main() -> int:
     password = os.getenv("OPENROOTS_MQTT_DEVICE_PASSWORD") or env_file_values.get("OPENROOTS_MQTT_DEVICE_PASSWORD")
     if not password:
         parser.error(f"set OPENROOTS_MQTT_DEVICE_PASSWORD in the environment or {args.env_file}")
+    if "\r" in password or "\n" in password:
+        parser.error("OPENROOTS_MQTT_DEVICE_PASSWORD must be a single-line value")
 
     api_url = args.api_url or os.getenv("OPENROOTS_API_URL") or env_file_values.get(
         "OPENROOTS_API_URL", "http://127.0.0.1:8080"
