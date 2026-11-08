@@ -76,7 +76,7 @@ def provision_broker_client(device_id: str, password: str) -> None:
     # Send the password over stdin, rather than placing it in the docker command
     # line where local process-listing tools could expose it.
     script = r'''set -eu
-read -r DEVICE_PASSWORD
+IFS= read -r DEVICE_PASSWORD
 if DETAILS=$(mosquitto_ctrl -h 127.0.0.1 -u "$MQTT_ADMIN_USERNAME" -P "$MQTT_ADMIN_PASSWORD" dynsec getClient "$1" 2>/dev/null); then
   mosquitto_ctrl -h 127.0.0.1 -u "$MQTT_ADMIN_USERNAME" -P "$MQTT_ADMIN_PASSWORD" dynsec setClientPassword "$1" "$DEVICE_PASSWORD"
   if ! printf '%s\n' "$DETAILS" | grep -Fq 'device-publisher'; then
@@ -97,6 +97,37 @@ fi
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip() or "docker compose exec failed"
         raise RuntimeError(f"Could not provision broker account for {device_id}: {detail}")
+
+
+def broker_diagnostics(device_id: str) -> None:
+    """Show which local Docker broker and dynsec client the load test will use."""
+    context = subprocess.run(
+        ["docker", "context", "show"], text=True, capture_output=True, check=False
+    )
+    if context.returncode == 0:
+        print(f"Docker context: {context.stdout.strip()}")
+
+    port = subprocess.run(
+        ["docker", "port", "openroots-mosquitto", "1883/tcp"],
+        text=True, capture_output=True, check=False,
+    )
+    if port.returncode == 0:
+        print("Mosquitto published endpoint(s):")
+        print(port.stdout.strip() or "  none")
+    else:
+        detail = port.stderr.strip() or port.stdout.strip()
+        raise RuntimeError(f"Could not inspect the Mosquitto port mapping: {detail}")
+
+    command = r'''mosquitto_ctrl -h 127.0.0.1 -u "$MQTT_ADMIN_USERNAME" -P "$MQTT_ADMIN_PASSWORD" dynsec getClient "$1"'''
+    result = subprocess.run(
+        ["docker", "exec", "openroots-mosquitto", "sh", "-c", command, "sh", device_id],
+        text=True, capture_output=True, check=False,
+    )
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(f"Broker account verification failed for {device_id}: {detail}")
+    print(f"Broker account details for first device ({device_id}):")
+    print(result.stdout.strip())
 
 
 def save_device_file(path: Path, device_ids: list[str]) -> None:
@@ -187,6 +218,7 @@ def main() -> int:
         if index == 1 or index == len(device_ids) or index % 10 == 0:
             print(f"Provisioned MQTT accounts: {index}/{len(device_ids)}")
 
+    broker_diagnostics(device_ids[0])
     print(f"\nReady: {len(device_ids)} test devices.")
     print(f"Device UUIDs: {args.output}")
     print("The MQTT load test password comes from OPENROOTS_MQTT_DEVICE_PASSWORD.")
