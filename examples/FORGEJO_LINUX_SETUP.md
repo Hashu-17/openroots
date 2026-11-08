@@ -72,17 +72,30 @@ cp .env.example .env
 nano .env
 ```
 
-Fill in the required values from `.env.example`: `POSTGRES_DB`,
-`POSTGRES_USER`, `POSTGRES_PASSWORD`, `MQTT_ADMIN_USERNAME`,
-`MQTT_ADMIN_PASSWORD`, `MQTT_INGESTOR_USERNAME`, and
-`MQTT_INGESTOR_PASSWORD`. Use test-only passwords for this local stack. Set or
-confirm:
+Keep the database and username values if you want, but replace all three
+example passwords with unique test-only values. Generate each password with
+`openssl rand -hex 32` and use a different result for each password. Edit the
+file so it contains these settings (keep any other settings from the sample):
 
 ```dotenv
+POSTGRES_DB=iot_backend
+POSTGRES_USER=iot_backend
+POSTGRES_PASSWORD=PASTE_A_UNIQUE_RANDOM_VALUE_HERE
+
+MQTT_ADMIN_USERNAME=openroots-admin
+MQTT_ADMIN_PASSWORD=PASTE_A_DIFFERENT_RANDOM_VALUE_HERE
+MQTT_INGESTOR_USERNAME=telemetry-ingestor-spring
+MQTT_INGESTOR_PASSWORD=PASTE_ANOTHER_RANDOM_VALUE_HERE
+
 MQTT_BIND_ADDRESS=127.0.0.1
 MQTT_PORT=1883
 BACKEND_PORT=8080
 ```
+
+Do not leave any `change-this-...` sample password in the file. You can run
+`openssl rand -hex 32` three times and paste one result into each password
+line. The app and database use the same `POSTGRES_DB` and `POSTGRES_USER`
+values shown here.
 
 `127.0.0.1` is correct because Forgejo Runner and Compose are on the same Linux
 host. The backend container still reaches Mosquitto through Compose's private
