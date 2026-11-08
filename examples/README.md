@@ -1,5 +1,9 @@
 # MQTT smoke and load tests
 
+For complete instructions to install a Linux Forgejo runner, configure the
+local stack, add Forgejo secrets, and run both workflows, see
+[`FORGEJO_LINUX_SETUP.md`](FORGEJO_LINUX_SETUP.md).
+
 `mqtt_smoke_test.py` checks the full path with one registered device: it
 publishes one QoS 1 message, waits for broker acknowledgement, then polls the
 backend API until the saved reading appears. `.github/workflows/mqtt-smoke.yml`
