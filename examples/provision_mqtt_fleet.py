@@ -77,15 +77,41 @@ def provision_broker_client(device_id: str, password: str) -> None:
     # line where local process-listing tools could expose it.
     script = r'''set -eu
 IFS= read -r DEVICE_PASSWORD
-if DETAILS=$(mosquitto_ctrl -h 127.0.0.1 -u "$MQTT_ADMIN_USERNAME" -P "$MQTT_ADMIN_PASSWORD" dynsec getClient "$1" 2>/dev/null); then
-  mosquitto_ctrl -h 127.0.0.1 -u "$MQTT_ADMIN_USERNAME" -P "$MQTT_ADMIN_PASSWORD" dynsec setClientPassword "$1" "$DEVICE_PASSWORD"
+
+dynsec() {
+  OUTPUT=$(mosquitto_ctrl -h 127.0.0.1 -u "$MQTT_ADMIN_USERNAME" -P "$MQTT_ADMIN_PASSWORD" dynsec "$@" 2>&1) || {
+    printf '%s\n' "$OUTPUT" >&2
+    return 1
+  }
+  if printf '%s\n' "$OUTPUT" | grep -Fq 'Error:'; then
+    printf '%s\n' "$OUTPUT" >&2
+    return 1
+  fi
+  printf '%s\n' "$OUTPUT"
+}
+
+get_client() {
+  mosquitto_ctrl -h 127.0.0.1 -u "$MQTT_ADMIN_USERNAME" -P "$MQTT_ADMIN_PASSWORD" dynsec getClient "$1" 2>&1 || true
+}
+
+DETAILS=$(get_client "$1")
+if printf '%s\n' "$DETAILS" | grep -Fq 'Error: Client not found'; then
+  dynsec createClient "$1" -p "$DEVICE_PASSWORD" >/dev/null
+  dynsec addClientRole "$1" device-publisher >/dev/null
+elif printf '%s\n' "$DETAILS" | grep -Fq 'Username:'; then
+  dynsec setClientPassword "$1" "$DEVICE_PASSWORD" >/dev/null
   if ! printf '%s\n' "$DETAILS" | grep -Fq 'device-publisher'; then
-    mosquitto_ctrl -h 127.0.0.1 -u "$MQTT_ADMIN_USERNAME" -P "$MQTT_ADMIN_PASSWORD" dynsec addClientRole "$1" device-publisher
+    dynsec addClientRole "$1" device-publisher >/dev/null
   fi
 else
-  mosquitto_ctrl -h 127.0.0.1 -u "$MQTT_ADMIN_USERNAME" -P "$MQTT_ADMIN_PASSWORD" dynsec createClient "$1" -p "$DEVICE_PASSWORD"
-  mosquitto_ctrl -h 127.0.0.1 -u "$MQTT_ADMIN_USERNAME" -P "$MQTT_ADMIN_PASSWORD" dynsec addClientRole "$1" device-publisher
+  printf '%s\n' "$DETAILS" >&2
+  echo "Could not determine whether broker client $1 exists" >&2
+  exit 1
 fi
+
+DETAILS=$(dynsec getClient "$1")
+printf '%s\n' "$DETAILS" | grep -Fq 'Username:'
+printf '%s\n' "$DETAILS" | grep -Fq 'device-publisher'
 '''
     result = subprocess.run(
         ["docker", "exec", "-i", "openroots-mosquitto", "sh", "-c", script, "sh", device_id],
@@ -94,8 +120,9 @@ fi
         capture_output=True,
         check=False,
     )
-    if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip() or "docker compose exec failed"
+    response = f"{result.stdout}{result.stderr}"
+    if result.returncode or "Error:" in response:
+        detail = response.strip() or "docker compose exec failed"
         raise RuntimeError(f"Could not provision broker account for {device_id}: {detail}")
 
 
@@ -123,11 +150,12 @@ def broker_diagnostics(device_id: str) -> None:
         ["docker", "exec", "openroots-mosquitto", "sh", "-c", command, "sh", device_id],
         text=True, capture_output=True, check=False,
     )
-    if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip()
+    response = f"{result.stdout}{result.stderr}"
+    if result.returncode or "Error:" in response:
+        detail = response.strip()
         raise RuntimeError(f"Broker account verification failed for {device_id}: {detail}")
     print(f"Broker account details for first device ({device_id}):")
-    print(result.stdout.strip())
+    print(response.strip())
 
 
 def save_device_file(path: Path, device_ids: list[str]) -> None:
