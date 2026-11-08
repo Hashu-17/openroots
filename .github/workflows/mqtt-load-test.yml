@@ -50,7 +50,7 @@ jobs:
     env:
       OPENROOTS_API_URL: http://127.0.0.1:8080
       OPENROOTS_PROJECT_ID: ${{ inputs.project_id }}
-      OPENROOTS_MQTT_DEVICE_PASSWORD: ${{ secrets.MQTT_SMOKE_DEVICE_PASSWORD }}
+      OPENROOTS_MQTT_DEVICE_PASSWORD: ${{ secrets.MQTT_LOAD_DEVICE_PASSWORD }}
       MQTT_SMOKE_DEVICE_ID: ${{ secrets.MQTT_SMOKE_DEVICE_ID }}
       OPENROOTS_MQTT_HOST: ${{ inputs.mqtt_host || '192.168.29.147' }}
       OPENROOTS_MQTT_PORT: ${{ inputs.mqtt_port || 1883 }}
@@ -75,6 +75,14 @@ jobs:
           curl.exe --fail --silent --show-error http://127.0.0.1:8080/actuator/health >nul
           if errorlevel 1 (
             echo OpenRoots backend is not responding at http://127.0.0.1:8080.
+            exit /b 1
+          )
+
+      - name: Check load-test password secret
+        shell: cmd
+        run: |
+          if not defined OPENROOTS_MQTT_DEVICE_PASSWORD (
+            echo Add the MQTT_LOAD_DEVICE_PASSWORD repository secret in GitHub Settings.
             exit /b 1
           )
 

@@ -218,9 +218,11 @@ backend are already running. A branch push creates/reuses 100 devices and
 runs them at a 10-second period for 5 minutes. Manual runs let you adjust the
 fleet size, broker host/port, period, and duration. The project is found from
 the existing `MQTT_SMOKE_DEVICE_ID` secret unless you enter a project UUID.
-The workflow uses `MQTT_SMOKE_DEVICE_PASSWORD` as the shared test-fleet
-password; no per-device GitHub secrets or local `examples/.env` are needed for
-Actions.
+Add a separate `MQTT_LOAD_DEVICE_PASSWORD` GitHub repository secret for the
+shared password used by all fleet clients. The load workflow provisions those
+broker accounts and uses the same secret to publish; the smoke-test password
+remains separate. No per-device GitHub secrets or local `examples/.env` are
+needed for Actions.
 
 The workflow installs its Python dependency in a fresh virtual environment
 because GitHub Actions checks out the code into its workspace for each run.
