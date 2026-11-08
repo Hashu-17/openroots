@@ -17,9 +17,9 @@ on:
         default: 100
         type: number
       mqtt_host:
-        description: Broker address reachable from this Windows runner
+        description: Broker address on this Windows runner
         required: true
-        default: 192.168.29.147
+        default: 127.0.0.1
         type: string
       mqtt_port:
         description: Published MQTT port
@@ -52,7 +52,7 @@ jobs:
       OPENROOTS_PROJECT_ID: ${{ inputs.project_id }}
       OPENROOTS_MQTT_DEVICE_PASSWORD: ${{ secrets.MQTT_SMOKE_DEVICE_PASSWORD }}
       MQTT_SMOKE_DEVICE_ID: ${{ secrets.MQTT_SMOKE_DEVICE_ID }}
-      OPENROOTS_MQTT_HOST: ${{ inputs.mqtt_host || '192.168.29.147' }}
+      OPENROOTS_MQTT_HOST: ${{ inputs.mqtt_host || '127.0.0.1' }}
       OPENROOTS_MQTT_PORT: ${{ inputs.mqtt_port || 1883 }}
 
     steps:
