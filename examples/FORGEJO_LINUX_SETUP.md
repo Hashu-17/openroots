@@ -248,7 +248,8 @@ sudo systemctl status forgejo-runner --no-pager
 Back in Forgejo **Settings → Actions → Runners**, confirm the runner is online
 and has the `openroots-smoke` label. The runner connects outbound to Forgejo;
 no inbound firewall port forwarding is required. It also needs outbound access
-to `data.forgejo.org` for checkout and PyPI for the MQTT dependency.
+to `data.forgejo.org` for checkout, `code.forgejo.org` for artifact upload, and
+PyPI for the MQTT dependency.
 
 ## 7. Run the smoke workflow
 
@@ -269,9 +270,13 @@ The run creates or reuses devices named `openroots-load-test-001` onward and
 writes their UUIDs to the ignored `examples/load-devices.txt` in that job's
 workspace. Reruns reuse the devices and reset their broker passwords. The run
 log reports connections, acknowledgements, failures, publish rate, and PUBACK
-latency. PUBACK confirms Mosquitto accepted a message; it does not alone prove
-the backend stored every row. Smoke separately verifies persistence for one
-record.
+latency. While the devices publish, it prints CPU and RAM samples for the
+backend, database, and broker every five seconds. It also writes a baseline and
+all samples to `load-test-results/resource-samples.csv`, then uploads that
+directory as the `mqtt-load-test-results` artifact. Open the completed run in
+Forgejo Actions and download the artifact to keep or graph the CSV. PUBACK
+confirms Mosquitto accepted a message; it does not alone prove the backend
+stored every row. Smoke separately verifies persistence for one record.
 
 ## Troubleshooting
 

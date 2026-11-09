@@ -69,11 +69,17 @@ python examples/mqtt_load_test.py --devices examples/load-devices.txt --period 1
 
 Defaults are 10 seconds, 120 seconds, QoS 1, and `temperature`. Configure
 `--host`/`--port` for a different broker. The test reports successful PUBACKs,
-failed publishes, rate, and PUBACK latency percentiles. PUBACK means the broker
-accepted the message; it does not prove the backend committed it to PostgreSQL.
-After the run, verify the expected telemetry rows in the development database
-and watch backend, broker, and database CPU/memory, connection counts, queueing,
-and logs. For a rough expectation, a 5-minute run at 10-second intervals
+failed publishes, rate, and PUBACK latency percentiles. It also samples Docker
+CPU and RAM for `iot-backend`, `iot-database`, and `openroots-mosquitto` every
+five seconds while publishing. Readings appear in the console and in
+`load-test-results/resource-samples.csv`; `--resource-sample-interval` and
+`--resource-output` can change the interval and path. The CSV includes a
+pre-test baseline, UTC timestamps, CPU percentage, memory used and limit, and
+container PID count. The final output summarizes average and peak CPU/RAM from
+the in-load samples. PUBACK means the broker accepted the message; it does not
+prove the backend committed it to PostgreSQL. After the run, verify the
+expected telemetry rows in the development database. For a rough expectation,
+a 5-minute run at 10-second intervals
 produces about 30 messages per device after the synchronized first publish
 (about 3,000 messages for 100 devices), with minor variation at the end of the
 run.
@@ -85,10 +91,22 @@ steady-state traffic, and a longer soak. Test synchronized bursts separately
 from staggered device schedules: they stress different parts of the system.
 Keep payload size and channel count realistic, repeat runs, and record the
 server and database resource usage alongside throughput, p95/p99 latency, and
-errors. Increase fleet size or message frequency in controlled steps until
+errors. This script's five-second `docker stats` samples and MQTT PUBACK
+latencies are a useful first load-test record. A more complete performance
+setup usually adds a time-series monitor such as Prometheus/Grafana, host-level
+CPU/RAM, application and database metrics, and explicit pass/fail targets.
+This run's sampling is container-level; Docker Desktop on Windows reports
+container memory differently from Linux, so compare runs on the same runner
+platform. Increase fleet size or message frequency in controlled steps until
 latency, error rate, or resource use exceeds the limits you set. Run against a
 disposable development/staging stack, since this script writes real telemetry
 and creates concurrent broker connections.
+
+Both load-test workflows upload `load-test-results/resource-samples.csv` as
+the `mqtt-load-test-results` artifact. Download it from the completed GitHub or
+Forgejo workflow run. The live workflow log also shows each sample. A five
+minute run with a five second interval produces roughly 60 in-load samples per
+container, plus the baseline.
 
 ## GitHub Actions smoke test setup
 

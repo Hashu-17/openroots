@@ -14,7 +14,7 @@
     <groupId>com.openroots</groupId>
     <artifactId>iot-backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>iot-backend</name>
+    <name>OpenRoots IoT Backend</name>
     <description>Spring backend for IoT devices</description>
 
     <properties>
