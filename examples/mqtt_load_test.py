@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
+import re
 import statistics
+import subprocess
 import threading
 import time
 import uuid
@@ -16,6 +19,121 @@ from pathlib import Path
 
 import paho.mqtt.client as mqtt
 
+RESOURCE_CONTAINERS = ("iot-backend", "iot-database", "openroots-mosquitto")
+
+
+def parse_memory_bytes(value: str) -> int:
+    match = re.fullmatch(r"\s*([0-9.]+)\s*([KMGT]?i?B)\s*", value, re.IGNORECASE)
+    if not match:
+        raise ValueError(f"unrecognized Docker memory value: {value!r}")
+    amount = float(match.group(1))
+    unit = match.group(2).upper()
+    powers = {"B": 0, "KB": 1, "KIB": 1, "MB": 2, "MIB": 2,
+              "GB": 3, "GIB": 3, "TB": 4, "TIB": 4}
+    base = 1024 if "I" in unit else 1000
+    return int(amount * (base ** powers[unit]))
+
+
+class ResourceSampler:
+    """Capture Docker container CPU and memory while the publishers are active."""
+
+    def __init__(self, output: Path, interval: float):
+        self.output = output
+        self.interval = interval
+        self.stop = threading.Event()
+        self.thread: threading.Thread | None = None
+        self.rows: list[dict[str, str | int | float]] = []
+        self.errors: list[str] = []
+
+    def sample(self, phase: str) -> None:
+        command = ["docker", "stats", "--no-stream", "--format",
+                   "{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}|{{.PIDs}}",
+                   *RESOURCE_CONTAINERS]
+        try:
+            result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=30)
+            lines = [line for line in result.stdout.splitlines() if line.strip()]
+            parsed: dict[str, tuple[str, str, str, str]] = {}
+            for line in lines:
+                fields = line.split("|")
+                if len(fields) != 4:
+                    raise ValueError(f"unexpected docker stats output: {line!r}")
+                name, cpu, memory, pids = fields
+                used, separator, limit = memory.partition(" / ")
+                if not separator:
+                    raise ValueError(f"unexpected Docker memory output: {memory!r}")
+                parsed[name] = (cpu.rstrip("%"), used, limit, pids)
+            missing = [name for name in RESOURCE_CONTAINERS if name not in parsed]
+            if missing:
+                raise RuntimeError(f"docker stats did not return running containers: {', '.join(missing)}")
+            timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            self.output.parent.mkdir(parents=True, exist_ok=True)
+            with self.output.open("a", newline="", encoding="utf-8") as output_file:
+                writer = csv.DictWriter(output_file, fieldnames=[
+                    "timestamp_utc", "phase", "container", "cpu_percent",
+                    "memory_used_bytes", "memory_limit_bytes", "memory_used_mib",
+                    "memory_limit_mib", "pids",
+                ])
+                for name in RESOURCE_CONTAINERS:
+                    cpu_text, used_text, limit_text, pids_text = parsed[name]
+                    used_bytes = parse_memory_bytes(used_text)
+                    limit_bytes = parse_memory_bytes(limit_text)
+                    row: dict[str, str | int | float] = {
+                        "timestamp_utc": timestamp,
+                        "phase": phase,
+                        "container": name,
+                        "cpu_percent": float(cpu_text),
+                        "memory_used_bytes": used_bytes,
+                        "memory_limit_bytes": limit_bytes,
+                        "memory_used_mib": round(used_bytes / (1024 ** 2), 2),
+                        "memory_limit_mib": round(limit_bytes / (1024 ** 2), 2),
+                        "pids": int(pids_text),
+                    }
+                    writer.writerow(row)
+                    self.rows.append(row)
+                    print(f"[resources {phase} {timestamp}] {name}: "
+                          f"CPU {row['cpu_percent']:.1f}%, RAM {row['memory_used_mib']:.1f} MiB, "
+                          f"PIDs {row['pids']}", flush=True)
+        except Exception as error:
+            message = f"resource sample failed: {error}"
+            self.errors.append(message)
+            print(f"[resources] WARNING: {message}", flush=True)
+
+    def start(self) -> None:
+        self.output.parent.mkdir(parents=True, exist_ok=True)
+        with self.output.open("w", newline="", encoding="utf-8") as output_file:
+            csv.DictWriter(output_file, fieldnames=[
+                "timestamp_utc", "phase", "container", "cpu_percent",
+                "memory_used_bytes", "memory_limit_bytes", "memory_used_mib",
+                "memory_limit_mib", "pids",
+            ]).writeheader()
+        self.sample("baseline")
+        self.thread = threading.Thread(target=self._sample_loop, name="docker-resource-sampler", daemon=True)
+        self.thread.start()
+
+    def _sample_loop(self) -> None:
+        while not self.stop.wait(self.interval):
+            self.sample("during")
+
+    def finish(self) -> None:
+        self.stop.set()
+        if self.thread:
+            self.thread.join()
+
+    def print_summary(self) -> None:
+        during_by_container: dict[str, list[dict[str, str | int | float]]] = {}
+        for row in self.rows:
+            if row["phase"] == "during":
+                during_by_container.setdefault(str(row["container"]), []).append(row)
+        print(f"  resource samples:  {self.output} ({sum(map(len, during_by_container.values()))} during-load container samples)")
+        for name in RESOURCE_CONTAINERS:
+            samples = during_by_container.get(name, [])
+            if samples:
+                cpus = [float(row["cpu_percent"]) for row in samples]
+                memory = [float(row["memory_used_mib"]) for row in samples]
+                print(f"  {name}: CPU avg/max {statistics.fmean(cpus):.1f}%/{max(cpus):.1f}%, "
+                      f"RAM avg/max {statistics.fmean(memory):.1f}/{max(memory):.1f} MiB")
+        if self.errors:
+            print(f"  resource sampling warnings: {len(self.errors)}")
 
 def load_local_env() -> None:
     """Load examples/.env for local runs without overriding workflow variables."""
@@ -86,12 +204,16 @@ def main() -> int:
     parser.add_argument("--connect-timeout", type=float, default=15.0,
                         help="maximum seconds to wait for each broker CONNACK")
     parser.add_argument("--qos", type=int, choices=(0, 1, 2), default=1)
+    parser.add_argument("--resource-sample-interval", type=float, default=5.0,
+                        help="seconds between Docker CPU/RAM samples")
+    parser.add_argument("--resource-output", default="load-test-results/resource-samples.csv",
+                        help="CSV path for Docker resource samples")
     parser.add_argument("--channel", action="append", dest="channels",
                         help="registered numeric sensor channel; repeat to send multiple readings")
     args = parser.parse_args()
 
-    if args.period <= 0 or args.duration <= 0 or args.connect_timeout <= 0:
-        parser.error("--period, --duration, and --connect-timeout must be greater than zero")
+    if args.period <= 0 or args.duration <= 0 or args.connect_timeout <= 0 or args.resource_sample_interval <= 0:
+        parser.error("--period, --duration, --connect-timeout, and --resource-sample-interval must be greater than zero")
     device_ids = read_device_ids(args.devices)
     channels = args.channels or ["temperature"]
     password = os.getenv("OPENROOTS_MQTT_DEVICE_PASSWORD")
@@ -142,6 +264,8 @@ def main() -> int:
         return 2
 
     print(f"Broker connections accepted: {len(clients)}/{len(device_ids)}")
+    resource_sampler = ResourceSampler(Path(args.resource_output), args.resource_sample_interval)
+    resource_sampler.start()
 
     def publish_loop(device_id: str, client: mqtt.Client) -> None:
         topic = f"openroots/v1/devices/{device_id}/telemetry"
@@ -189,6 +313,7 @@ def main() -> int:
     stop.set()
     for worker in workers:
         worker.join()
+    resource_sampler.finish()
     for _, client in clients:
         client.disconnect()
         client.loop_stop()
@@ -200,6 +325,7 @@ def main() -> int:
     print(f"  acknowledged:      {results.acknowledged}")
     print(f"  failed:            {results.failed}")
     print(f"  publish rate:      {results.acknowledged / elapsed:.2f} messages/s")
+    resource_sampler.print_summary()
     if latency:
         print(f"  PUBACK latency ms: mean {statistics.fmean(latency):.2f}, "
               f"p95 {percentile(latency, 0.95):.2f}, max {max(latency):.2f}")
@@ -208,7 +334,8 @@ def main() -> int:
         for error in results.errors:
             print(f"    - {error}")
     print("\nPUBACK confirms broker receipt; check the database separately to confirm ingestion and persistence.")
-    return 1 if results.failed else 0
+    has_in_load_samples = any(row["phase"] == "during" for row in resource_sampler.rows)
+    return 1 if results.failed or resource_sampler.errors or not has_in_load_samples else 0
 
 
 if __name__ == "__main__":

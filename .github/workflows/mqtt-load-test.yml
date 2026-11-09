@@ -109,3 +109,13 @@ jobs:
           --devices examples/load-devices.txt
           --period "${{ inputs.period_seconds || 10 }}"
           --duration "${{ inputs.duration_seconds || 300 }}"
+          --resource-sample-interval 5
+          --resource-output load-test-results/resource-samples.csv
+
+      - name: Upload load-test resource samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mqtt-load-test-results
+          path: load-test-results/
+          if-no-files-found: warn

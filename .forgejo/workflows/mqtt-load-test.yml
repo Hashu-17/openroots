@@ -81,4 +81,14 @@ jobs:
           .venv-forgejo-mqtt-load/bin/python examples/mqtt_load_test.py \
             --devices examples/load-devices.txt \
             --period '${{ inputs.period_seconds }}' \
-            --duration '${{ inputs.duration_seconds }}'
+            --duration '${{ inputs.duration_seconds }}' \
+            --resource-sample-interval 5 \
+            --resource-output load-test-results/resource-samples.csv
+
+      - name: Upload load-test resource samples
+        if: always()
+        uses: https://code.forgejo.org/forgejo/upload-artifact@v4
+        with:
+          name: mqtt-load-test-results
+          path: load-test-results/
+          if-no-files-found: warn
