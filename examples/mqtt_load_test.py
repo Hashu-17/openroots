@@ -111,8 +111,15 @@ class ResourceSampler:
         self.thread.start()
 
     def _sample_loop(self) -> None:
-        while not self.stop.wait(self.interval):
+        next_sample = time.monotonic() + self.interval
+        while True:
+            if self.stop.wait(max(0.0, next_sample - time.monotonic())):
+                return
             self.sample("during")
+            next_sample += self.interval
+            now = time.monotonic()
+            while next_sample <= now:
+                next_sample += self.interval
 
     def finish(self) -> None:
         self.stop.set()

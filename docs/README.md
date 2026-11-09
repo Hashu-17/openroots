@@ -15,8 +15,17 @@ This folder documents the current `spring-mqtt-ingestion` implementation. Where 
 ## Developer Guides
 
 - [Frontend Guide](frontend/README.md)
-- Backend Guide
+- [Backend Javadoc](../target/reports/apidocs/index.html)
 - Testing
+
+### Backend 
+Generate the Javadoc from the repository root:
+
+```powershell
+mvn compile javadoc:javadoc -DskipTests
+```
+
+Then open `target/reports/apidocs/index.html` in a browser.
 
 ## References
 
