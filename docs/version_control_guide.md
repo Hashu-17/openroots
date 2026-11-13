@@ -42,7 +42,7 @@ The goal is to merge your short-lived feature branch into our `main` (or current
      ```bash
      npm run test:unit
      ```
-   * Commit and push your branch. Our **CI workflow** automatically runs unit tests on every pushed commit:
+   * Commit and push your branch. Our **CI workflow** automatically runs unit tests on every pushed commit: check [commit conventions](https://gist.github.com/qoomon/5dfcdf8eec66a051ecd85625518cfd13).
      ```bash
      git add .
      git commit -m "feat: add your feature description"
