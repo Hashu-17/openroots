@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface DeviceRepository extends JpaRepository<DeviceEntity, UUID> {
 
+    /** Every device with its project and sensors, for the Go ingestion registry snapshot. */
     @EntityGraph(attributePaths = {"project", "sensors"})
     @Query("select distinct device from DeviceEntity device")
     List<DeviceEntity> findAllWithSensors();

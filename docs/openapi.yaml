@@ -1,0 +1,1050 @@
+openapi: 3.0.3
+info:
+  title: OpenRoots API
+  version: 0.1.0
+  description: REST API for the OpenRoots self-hosted IoT platform.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: Auth
+  - name: Admin
+  - name: Projects
+  - name: Members
+  - name: Devices
+  - name: Credentials
+  - name: Telemetry
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a user account
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Account registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoidApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Exchange email and password for a JWT access token
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Return the authenticated user and their platform role
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/admin/users:
+    get:
+      tags: [Admin]
+      summary: List all user accounts (platform ADMIN only)
+      operationId: listUsers
+      responses:
+        '200':
+          description: Users returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserListApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/admin/users/{userId}/platform-role:
+    put:
+      tags: [Admin]
+      summary: Change a user's platform role (platform ADMIN only)
+      operationId: updateUserPlatformRole
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformRoleRequest'
+      responses:
+        '200':
+          description: Platform role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/projects:
+    post:
+      tags: [Projects]
+      summary: Create a project owned by the caller (platform ADMIN only)
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreateRequest'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      tags: [Projects]
+      summary: List projects
+      operationId: listProjects
+      responses:
+        '200':
+          description: Projects returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListApiResponse'
+  /api/v1/projects/{projectId}:
+    get:
+      tags: [Projects]
+      summary: Get a project
+      operationId: getProject
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Project returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectApiResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/projects/{projectId}/members:
+    get:
+      tags: [Members]
+      summary: List project members
+      operationId: listProjectMembers
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Members returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberListApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Members]
+      summary: Add an existing user to the project (OWNER or ADMIN)
+      operationId: addProjectMember
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberAddRequest'
+      responses:
+        '201':
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/projects/{projectId}/members/{userId}:
+    put:
+      tags: [Members]
+      summary: Change a member's role (OWNER or ADMIN)
+      operationId: updateProjectMemberRole
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRoleRequest'
+      responses:
+        '200':
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Members]
+      summary: Remove a member (OWNER or ADMIN)
+      operationId: removeProjectMember
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Member removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoidApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/projects/{projectId}/devices:
+    get:
+      tags: [Devices]
+      summary: List devices in a project
+      operationId: listProjectDevices
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Devices returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceListApiResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Devices]
+      summary: Register a device with sensors
+      operationId: registerDevice
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCreateRequest'
+      responses:
+        '201':
+          description: Device registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/projects/{projectId}/devices/{deviceId}:
+    get:
+      tags: [Devices]
+      summary: Get a device and its sensors
+      operationId: getDevice
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Device returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceApiResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Devices]
+      summary: Delete a device
+      operationId: deleteDevice
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Device deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoidApiResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/projects/{projectId}/devices/{deviceId}/credentials:
+    get:
+      tags: [Credentials]
+      summary: List a device's credentials (metadata only, never secrets)
+      operationId: listDeviceCredentials
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Credentials returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCredentialListApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Credentials]
+      summary: Create a device credential; the secret is returned only in this response
+      operationId: createDeviceCredential
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCredentialCreateRequest'
+      responses:
+        '201':
+          description: Credential created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCredentialSecretApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/projects/{projectId}/devices/{deviceId}/credentials/{credentialId}:
+    delete:
+      tags: [Credentials]
+      summary: Revoke a device credential
+      operationId: revokeDeviceCredential
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DeviceId'
+        - $ref: '#/components/parameters/CredentialId'
+      responses:
+        '200':
+          description: Credential revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoidApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/projects/{projectId}/devices/{deviceId}/credentials/{credentialId}/rotate:
+    post:
+      tags: [Credentials]
+      summary: Rotate a credential; the new secret is returned only in this response
+      operationId: rotateDeviceCredential
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DeviceId'
+        - $ref: '#/components/parameters/CredentialId'
+      responses:
+        '200':
+          description: Credential rotated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCredentialSecretApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/telemetry:
+    get:
+      tags: [Telemetry]
+      summary: List telemetry
+      operationId: listTelemetry
+      parameters:
+        - name: deviceId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Telemetry returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryListApiResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Telemetry]
+      summary: Ingest telemetry
+      operationId: ingestTelemetry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryIngestRequest'
+      responses:
+        '201':
+          description: Telemetry accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CredentialId:
+      name: credentialId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+    AuthResponse:
+      type: object
+      required: [accessToken, tokenType, expiresInSeconds]
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          example: Bearer
+        expiresInSeconds:
+          type: integer
+          format: int64
+    AuthApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/AuthResponse'
+        timestamp:
+          type: string
+          format: date-time
+    PlatformRole:
+      type: string
+      enum: [USER, ADMIN]
+      description: Platform-wide role. Only ADMIN may create projects and change platform roles.
+    CurrentUserResponse:
+      type: object
+      required: [id, email, platformRole]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        platformRole:
+          $ref: '#/components/schemas/PlatformRole'
+    CurrentUserApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/CurrentUserResponse'
+        timestamp:
+          type: string
+          format: date-time
+    AdminUserResponse:
+      type: object
+      required: [id, email, platformRole, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        platformRole:
+          $ref: '#/components/schemas/PlatformRole'
+        createdAt:
+          type: string
+          format: date-time
+    PlatformRoleRequest:
+      type: object
+      required: [platformRole]
+      properties:
+        platformRole:
+          $ref: '#/components/schemas/PlatformRole'
+    AdminUserApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/AdminUserResponse'
+        timestamp:
+          type: string
+          format: date-time
+    AdminUserListApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUserResponse'
+        timestamp:
+          type: string
+          format: date-time
+    ProjectCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '[\s\S]*\S[\s\S]*'
+    ProjectRole:
+      type: string
+      enum: [OWNER, ADMIN, MEMBER, VIEWER]
+    MemberResponse:
+      type: object
+      required: [userId, email, role]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+        role:
+          $ref: '#/components/schemas/ProjectRole'
+    MemberAddRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/ProjectRole'
+    MemberRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          $ref: '#/components/schemas/ProjectRole'
+    MemberApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/MemberResponse'
+        timestamp:
+          type: string
+          format: date-time
+    MemberListApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberResponse'
+        timestamp:
+          type: string
+          format: date-time
+    DeviceCredentialCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '[\s\S]*\S[\s\S]*'
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional expiry; must be in the future.
+    DeviceCredentialSummary:
+      type: object
+      required: [id, name, createdAt, active]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        active:
+          type: boolean
+    DeviceCredentialSecret:
+      type: object
+      required: [id, name, secret]
+      description: Returned only when a credential is created or rotated. The secret cannot be retrieved again.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        secret:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+    DeviceCredentialListApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceCredentialSummary'
+        timestamp:
+          type: string
+          format: date-time
+    DeviceCredentialSecretApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/DeviceCredentialSecret'
+        timestamp:
+          type: string
+          format: date-time
+    ProjectResponse:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    SensorCreateRequest:
+      type: object
+      required: [channelName]
+      properties:
+        channelName:
+          type: string
+          minLength: 1
+          pattern: '[\s\S]*\S[\s\S]*'
+          description: Must contain at least one non-whitespace character.
+        unit:
+          type: string
+          nullable: true
+    DeviceCreateRequest:
+      type: object
+      required: [name, type, sensors]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          pattern: '[\s\S]*\S[\s\S]*'
+          description: Must contain at least one non-whitespace character.
+        type:
+          type: string
+          minLength: 1
+          pattern: '[\s\S]*\S[\s\S]*'
+          description: Must contain at least one non-whitespace character.
+        sensors:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SensorCreateRequest'
+    SensorResponse:
+      type: object
+      required: [id, channelName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        channelName:
+          type: string
+        unit:
+          type: string
+          nullable: true
+    DeviceResponse:
+      type: object
+      required: [id, projectId, name, type, status, registeredAt, sensors]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        registeredAt:
+          type: string
+          format: date-time
+        sensors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SensorResponse'
+    TelemetryIngestRequest:
+      type: object
+      required: [deviceId, capturedAt, payload]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        capturedAt:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties:
+            type: number
+    TelemetryResponse:
+      type: object
+      required: [id, deviceId, capturedAt, payload]
+      properties:
+        id:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        capturedAt:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties:
+            type: number
+    ProjectListApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectResponse'
+        timestamp:
+          type: string
+          format: date-time
+    ProjectApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/ProjectResponse'
+        timestamp:
+          type: string
+          format: date-time
+    DeviceListApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceResponse'
+        timestamp:
+          type: string
+          format: date-time
+    DeviceApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/DeviceResponse'
+        timestamp:
+          type: string
+          format: date-time
+    VoidApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          type: object
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+    TelemetryListApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TelemetryResponse'
+        timestamp:
+          type: string
+          format: date-time
+    TelemetryApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/TelemetryResponse'
+        timestamp:
+          type: string
+          format: date-time
+    ErrorApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        message:
+          type: string
+        data:
+          oneOf:
+            - type: array
+              items:
+                type: string
+            - type: object
+              nullable: true
+          description: Null for not-found and business-rule errors, or a list of validation messages.
+        timestamp:
+          type: string
+          format: date-time
+  responses:
+    BadRequest:
+      description: Request validation or business-rule failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorApiResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorApiResponse'
+
+    Unauthorized:
+      description: Missing, invalid or expired access token, or bad login credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorApiResponse'
+    Forbidden:
+      description: Authenticated, but the caller's project role does not permit this operation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorApiResponse'

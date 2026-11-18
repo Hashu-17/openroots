@@ -8,7 +8,9 @@ import com.openroots.device.model.SensorEntity;
 import com.openroots.device.repository.DeviceRepository;
 import com.openroots.project.model.ProjectEntity;
 import com.openroots.project.repository.ProjectRepository;
+import com.openroots.project.service.ProjectAuthorizationService;
 import jakarta.transaction.Transactional;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -20,11 +22,58 @@ public class DeviceService {
 
     private final DeviceRepository deviceRepository;
     private final ProjectRepository projectRepository;
+    private final ProjectAuthorizationService authorizationService;
 
-    public DeviceService(DeviceRepository deviceRepository, ProjectRepository projectRepository) {
+    public DeviceService(
+            DeviceRepository deviceRepository,
+            ProjectRepository projectRepository,
+            ProjectAuthorizationService authorizationService) {
         this.deviceRepository = deviceRepository;
         this.projectRepository = projectRepository;
+        this.authorizationService = authorizationService;
     }
+
+    // --- Authorized entry points used by the REST layer (caller identified by email) ---
+
+    @Transactional
+    public DeviceEntity register(String email, UUID projectId, DeviceCreateRequest request) {
+        authorizationService.requireManage(email, projectId);
+        return register(projectId, request);
+    }
+
+    @Transactional
+    public List<DeviceEntity> findByProject(String email, UUID projectId) {
+        authorizationService.requireRead(email, projectId);
+        return findByProject(projectId);
+    }
+
+    @Transactional
+    public DeviceEntity findById(String email, UUID projectId, UUID deviceId) {
+        authorizationService.requireRead(email, projectId);
+        return findById(projectId, deviceId);
+    }
+
+    /** Device lookup for operations that modify the device or its credentials (OWNER/ADMIN). */
+    @Transactional
+    public DeviceEntity findByIdForManage(String email, UUID projectId, UUID deviceId) {
+        authorizationService.requireManage(email, projectId);
+        return findById(projectId, deviceId);
+    }
+
+    @Transactional
+    public void delete(String email, UUID projectId, UUID deviceId) {
+        authorizationService.requireManage(email, projectId);
+        delete(projectId, deviceId);
+    }
+
+    /** Project that owns the device; used to authorize device-scoped requests such as telemetry. */
+    public UUID findProjectId(UUID deviceId) {
+        return deviceRepository.findById(deviceId)
+                .map(device -> device.getProject().getId())
+                .orElseThrow(() -> new NotFoundException("Device not found: " + deviceId));
+    }
+
+    // --- Unauthorized variants: trusted internal callers only (e.g. the authorized wrappers above) ---
 
     @Transactional
     public DeviceEntity register(UUID projectId, DeviceCreateRequest request) {
@@ -64,6 +113,17 @@ public class DeviceService {
     @Transactional
     public void delete(UUID projectId, UUID deviceId) {
         deviceRepository.delete(findById(projectId, deviceId));
+    }
+
+    public boolean exists(UUID deviceId) {
+        return deviceRepository.existsById(deviceId);
+    }
+
+    @Transactional
+    public void markOnline(UUID deviceId) {
+        DeviceEntity device = deviceRepository.findById(deviceId)
+                .orElseThrow(() -> new NotFoundException("Device not found: " + deviceId));
+        device.markOnline(Instant.now());
     }
 
     private void requireProject(UUID projectId) {
