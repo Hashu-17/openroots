@@ -26,14 +26,20 @@ server:
   port: 8080
 
 openroots:
-  mqtt:
-    provisioning-enabled: ${OPENROOTS_MQTT_PROVISIONING_ENABLED:false}
-    broker-host: ${OPENROOTS_MQTT_BROKER_HOST:localhost}
-    broker-port: ${OPENROOTS_MQTT_BROKER_PORT:1883}
-    admin-username: ${OPENROOTS_MQTT_ADMIN_USERNAME:}
-    admin-password: ${OPENROOTS_MQTT_ADMIN_PASSWORD:}
-    response-timeout-seconds: 5
+  jwt:
+    # Base64-encoded HMAC key, at least 32 bytes. No default here on purpose: the app
+    # refuses to start outside the dev profile without OPENROOTS_JWT_SECRET.
+    secret: ${OPENROOTS_JWT_SECRET}
+    expiration: ${OPENROOTS_JWT_EXPIRATION:PT15M}
+  bootstrap:
+    admin:
+      # Creates the first platform administrator at startup when none exists.
+      # Leave empty to skip. Remove the password from the environment after first login.
+      email: ${OPENROOTS_BOOTSTRAP_ADMIN_EMAIL:}
+      password: ${OPENROOTS_BOOTSTRAP_ADMIN_PASSWORD:}
   ingestion:
+    # Shared key the Go ingestion service sends to read the device registry.
+    # Empty disables the registry endpoint (every request gets 401).
     registry-api-key: ${OPENROOTS_INGESTION_REGISTRY_API_KEY:}
 
 management:

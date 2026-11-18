@@ -34,9 +34,29 @@ public class ProjectMemberEntity {
     protected ProjectMemberEntity() {
     }
 
-    public ProjectMemberEntity(UserEntity user, ProjectEntity project, String role) {
+    public ProjectMemberEntity(UserEntity user, ProjectEntity project, ProjectRole role) {
         this.user = user;
         this.project = project;
-        this.role = role;
+        this.role = role.name();
+    }
+
+    public UUID getId() {
+        return id;
+    }
+
+    public UserEntity getUser() {
+        return user;
+    }
+
+    public ProjectEntity getProject() {
+        return project;
+    }
+
+    public ProjectRole getRole() {
+        return ProjectRole.parse(role);
+    }
+
+    public void setRole(ProjectRole role) {
+        this.role = role.name();
     }
 }
