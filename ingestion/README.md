@@ -21,9 +21,11 @@ HTML viewer listen on port `8081` inside the Compose network.
    docker compose up --build -d
    ```
 
-   Open `http://<server-lan-ip>:5173`, choose a project, and register a device
-   with its sensor channel names. Copy the MQTT username, password, and publish
-   topic shown after registration. The password is shown only once.
+   Open `http://<server-lan-ip>:5173`, sign in, choose a project, and register
+   a device with its sensor channel names. Create the device's broker account
+   (username = device UUID) with `tests/support/mqtt/provision_mqtt_device.sh`
+   or `.ps1`; see [MQTT smoke and load tests](../docs/testing/mqtt-smoke-and-load.md).
+   The publish topic is `openroots/v1/devices/<device UUID>/telemetry`.
 4. Copy `ingestion/examples/raspberry_pi.env.example` to a private `.env` file
    on the Pi. Fill in the server LAN IP and the three values shown by the site;
    set `TELEMETRY_VALUES_JSON` to a JSON object mapping registered sensor

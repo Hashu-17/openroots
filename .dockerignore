@@ -3,8 +3,12 @@
 .vscode
 .env
 frontend
+ingestion
 prompts
-docs
+plans
 architecture
+examples
+tests
 target
 *.md
+
