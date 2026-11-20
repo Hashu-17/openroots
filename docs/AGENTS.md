@@ -1,0 +1,1 @@
+  # High-level repo map & rules for AI agents and new hires
