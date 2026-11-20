@@ -1,11 +1,16 @@
 name: MQTT smoke test
 
+# Manual only: it needs the local stack running on the self-hosted runner.
+# Never add pull_request here; a PR's code would run on that machine.
 on:
-  
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: mqtt-smoke-windows
+  cancel-in-progress: false
 
 jobs:
   mqtt-smoke:

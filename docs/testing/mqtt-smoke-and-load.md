@@ -1,8 +1,8 @@
 # MQTT smoke and load tests
 
-For complete instructions to install a Linux Forgejo runner, configure the
-local stack, add Forgejo secrets, and run both workflows, see
-[`forgejo-linux-setup.md`](forgejo-linux-setup.md).
+These are black-box tests against a running stack. They run manually on a
+self-hosted runner, never on pull requests; the PR checks are described in
+[`README.md`](README.md).
 
 `mqtt_smoke_test.py` checks the full path with one registered device: it
 publishes one QoS 1 message, waits for broker acknowledgement, then polls the
@@ -102,9 +102,9 @@ latency, error rate, or resource use exceeds the limits you set. Run against a
 disposable development/staging stack, since this script writes real telemetry
 and creates concurrent broker connections.
 
-Both load-test workflows upload `load-test-results/resource-samples.csv` as
-the `mqtt-load-test-results` artifact. Download it from the completed GitHub or
-Forgejo workflow run. The live workflow log also shows each sample. A five
+The load-test workflow uploads `load-test-results/resource-samples.csv` as
+the `mqtt-load-test-results` artifact. Download it from the completed GitHub
+workflow run. The live workflow log also shows each sample. A five
 minute run with a five second interval produces roughly 60 in-load samples per
 container, plus the baseline.
 
@@ -191,15 +191,7 @@ installation path when creating its virtual environment.
    - `MQTT_SMOKE_DEVICE_PASSWORD` — the password set in `tests/support/mqtt/.env` and used by the provisioning script.
 
    Do not put either value in the workflow file or commit them.
-9. Push the workflow and scripts to GitHub. From the repository root:
-
-   ```powershell
-   git add .github/workflows/mqtt-smoke.yml docs/testing/mqtt-smoke-and-load.md tests/support/mqtt/.env.example tests/e2e/mqtt/mqtt_smoke_test.py tests/load/mqtt/mqtt_load_test.py tests/support/mqtt/requirements-mqtt.txt .gitignore README.md
-   git commit -m "Add GitHub MQTT smoke test"
-   git push
-   ```
-
-   In the GitHub repo, open **Actions → MQTT smoke test → Run workflow**. A
+9. In the GitHub repo, open **Actions → MQTT smoke test → Run workflow**. A
    passing run means the broker acknowledged the publish and the backend API
    returned that exact reading from PostgreSQL.
 
@@ -233,12 +225,13 @@ push does not write test data automatically.
 
 ## GitHub Actions load test
 
-`.github/workflows/mqtt-load-test.yml` runs on pushes to
-`spring-mqtt-ingestion` and can also be manually dispatched. It uses the same
-Windows self-hosted runner and checks that the local Mosquitto container and
-backend are already running. A branch push creates/reuses 100 devices and
-runs them at a 10-second period for 5 minutes. Manual runs let you adjust the
-fleet size, broker host/port, period, and duration. The project is found from
+`.github/workflows/mqtt-load-test.yml` is manual only (**Actions → MQTT load
+test → Run workflow**); it does not run on pushes, because it needs the local
+stack and writes thousands of telemetry rows. It uses the same Windows
+self-hosted runner and checks that the local Mosquitto container and backend
+are already running. By default it creates/reuses 100 devices and runs them at
+a 10-second period for 5 minutes; the run form lets you adjust the fleet size,
+broker host/port, period, and duration. The project is found from
 the existing `MQTT_SMOKE_DEVICE_ID` secret unless you enter a project UUID.
 Add a separate `MQTT_LOAD_DEVICE_PASSWORD` GitHub repository secret for the
 shared password used by all fleet clients. The load workflow provisions those

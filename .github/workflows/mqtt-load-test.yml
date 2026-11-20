@@ -1,9 +1,8 @@
 name: MQTT load test
 
+# Manual only: it needs the local stack running on the self-hosted runner and
+# writes thousands of telemetry rows, so it must never run on push or PR.
 on:
-  push:
-    branches:
-      - spring-mqtt-ingestion
   workflow_dispatch:
     inputs:
       project_id:
