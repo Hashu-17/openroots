@@ -49,4 +49,8 @@ public class UserEntity {
     public String getEmail() {
         return email;
     }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
 }
