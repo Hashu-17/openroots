@@ -7,7 +7,7 @@ import com.openroots.project.model.ProjectRole;
 import com.openroots.project.repository.ProjectMemberRepository;
 import com.openroots.project.repository.ProjectRepository;
 import com.openroots.user.model.UserEntity;
-import com.openroots.user.repository.UserRepository;
+import com.openroots.user.service.PlatformAuthorizationService;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -18,25 +18,27 @@ public class ProjectService {
 
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository memberRepository;
-    private final UserRepository userRepository;
     private final ProjectAuthorizationService authorizationService;
+    private final PlatformAuthorizationService platformAuthorizationService;
 
     public ProjectService(
             ProjectRepository projectRepository,
             ProjectMemberRepository memberRepository,
-            UserRepository userRepository,
-            ProjectAuthorizationService authorizationService) {
+            ProjectAuthorizationService authorizationService,
+            PlatformAuthorizationService platformAuthorizationService) {
         this.projectRepository = projectRepository;
         this.memberRepository = memberRepository;
-        this.userRepository = userRepository;
         this.authorizationService = authorizationService;
+        this.platformAuthorizationService = platformAuthorizationService;
     }
 
-    /** Creates a project and makes the caller its OWNER (BR-004). */
+    /**
+     * Creates a project and makes the caller its OWNER (BR-004). Only platform administrators
+     * may create projects; everyone else gains access by being added to one.
+     */
     @Transactional
     public ProjectEntity create(String email, String name) {
-        UserEntity user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new NotFoundException("User not found"));
+        UserEntity user = platformAuthorizationService.requireAdmin(email);
         ProjectEntity project = projectRepository.save(new ProjectEntity(name.trim()));
         memberRepository.save(new ProjectMemberEntity(user, project, ProjectRole.OWNER));
         return project;

@@ -76,7 +76,7 @@ paths:
   /api/v1/projects:
     post:
       tags: [Projects]
-      summary: Create a project owned by the caller
+      summary: Create a project owned by the caller (platform ADMIN only)
       operationId: createProject
       requestBody:
         required: true
@@ -95,6 +95,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     get:
       tags: [Projects]
       summary: List projects
