@@ -120,6 +120,13 @@ export default function App() {
     resetWorkspace()
   }
 
+  // Admin only (the backend answers 403 otherwise). The creator becomes the project's OWNER.
+  async function createProject(name: string) {
+    const project = await api.createProject(name)
+    setProjects((current) => [project, ...current])
+    setSelectedProjectId((current) => current || project.id)
+  }
+
   function openProject(projectId: string) {
     setSelectedProjectId(projectId)
     setView('project')
@@ -179,7 +186,14 @@ export default function App() {
     </header>
     <main className="mx-auto max-w-[1280px] px-6 pb-16 pt-10 sm:px-10 sm:pt-14">
       {view === 'projects'
-        ? <ProjectsIndex projects={projects} loading={projectsLoading} error={projectsError} onOpenProject={openProject} />
+        ? <ProjectsIndex
+          projects={projects}
+          loading={projectsLoading}
+          error={projectsError}
+          canCreateProjects={currentUser?.platformRole === 'ADMIN'}
+          onOpenProject={openProject}
+          onCreateProject={createProject}
+        />
         : <ProjectWorkspace
           projects={projects}
           project={selectedProject}
