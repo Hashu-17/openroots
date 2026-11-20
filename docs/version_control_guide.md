@@ -24,28 +24,33 @@ The goal is to merge your short-lived feature branch into our `main` (or current
    ```
    *(If you stashed changes in Step 1 that belong on this new branch, run `git stash pop` now.)*
 
-4. **Develop and write tests:** Build your feature and add the corresponding unit/component test (or E2E test for full user journeys) inside `tests/`:
+4. **Develop and write tests:** Build your feature and add tests next to the matching layer (full table in [Testing and CI](testing/README.md)):
    ```text
-   ├── tests/
-   │   ├── unit/                      <-- Fast isolated code & component tests
-   │   │   └── frontend/
-   │   │       └── feature-01/
-   │   │           └── Button.test.tsx
-   │   ├── e2e/                       <-- Full browser user flows (Playwright/Cypress)
-   │   │   └── checkout-flow.spec.ts
-   │   └── load/                      <-- Traffic & stress scripts (k6/JMeter/Locust)
-   │       └── api-stress.js
+   ├── frontend/
+   │   ├── src/views/AuthScreen.tsx
+   │   └── tests/unit/                <-- Frontend unit/component tests (Vitest), mirroring src/
+   │       └── views/AuthScreen.test.tsx
+   ├── src/test/java/com/openroots/   <-- Backend tests: *Test = unit, *IT = integration (Testcontainers)
+   └── tests/                         <-- Black-box tests against a running stack
+       ├── e2e/mqtt/                  <-- End-to-end MQTT smoke test
+       ├── load/mqtt/                 <-- MQTT fleet load test
+       └── support/mqtt/              <-- Shared provisioning scripts and local .env
    ```
 
 5. **Test locally, commit, push, and open a Pull Request:**
-   * Run unit tests locally first to catch obvious errors before pushing:
+   * Run the same checks CI runs before pushing:
      ```bash
-     npm run test:unit
+     # frontend changes
+     cd frontend
+     npm run lint && npm run typecheck && npm test && npm run build
+
+     # backend changes (from the repository root)
+     mvn test        # unit tests; use `mvn verify` to add integration tests (needs Docker)
      ```
-   * Commit and push your branch. Our **CI workflow** automatically runs unit tests on every pushed commit: check [commit conventions](https://gist.github.com/qoomon/5dfcdf8eec66a051ecd85625518cfd13).
+   * Commit and push your branch. Follow the [commit conventions](https://gist.github.com/qoomon/5dfcdf8eec66a051ecd85625518cfd13).
      ```bash
-     git add .
+     git add <files>
      git commit -m "feat: add your feature description"
      git push -u origin feat/your-feature-name
      ```
-   * Open a **Pull Request** into `main`. The automated **CI/CD pipeline** will run the full PR test suite and block merging until all checks pass and a teammate approves.
+   * Open a **Pull Request** on GitHub into the branch the maintainer names (currently `spring-mqtt-ingestion`; `main` once an ingestion branch is chosen). The **CI** workflow runs three checks, `backend`, `frontend` and `docker`, and merging is blocked until all pass and a teammate approves. Pushing more commits to the PR re-runs them.
