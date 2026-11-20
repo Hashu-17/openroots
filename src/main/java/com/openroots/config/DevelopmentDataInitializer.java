@@ -2,6 +2,7 @@ package com.openroots.config;
 
 import com.openroots.project.model.ProjectEntity;
 import com.openroots.project.model.ProjectMemberEntity;
+import com.openroots.project.model.ProjectRole;
 import com.openroots.project.repository.ProjectMemberRepository;
 import com.openroots.project.repository.ProjectRepository;
 import com.openroots.user.model.UserEntity;
@@ -43,7 +44,7 @@ public class DevelopmentDataInitializer implements ApplicationRunner {
                 .orElseGet(() -> projectRepository.save(new ProjectEntity(SEED_PROJECT)));
 
         if (!projectMemberRepository.existsByUser_IdAndProject_Id(user.getId(), project.getId())) {
-            projectMemberRepository.save(new ProjectMemberEntity(user, project, "owner"));
+            projectMemberRepository.save(new ProjectMemberEntity(user, project, ProjectRole.OWNER));
         }
     }
 }
