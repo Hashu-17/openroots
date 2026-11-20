@@ -2,9 +2,13 @@ package com.openroots.auth;
 
 import com.openroots.openapi.api.AuthApi;
 import com.openroots.openapi.model.AuthApiResponse;
+import com.openroots.openapi.model.CurrentUserApiResponse;
+import com.openroots.openapi.model.CurrentUserResponse;
 import com.openroots.openapi.model.LoginRequest;
+import com.openroots.openapi.model.PlatformRole;
 import com.openroots.openapi.model.RegisterRequest;
 import com.openroots.openapi.model.VoidApiResponse;
+import com.openroots.user.model.UserEntity;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import org.springframework.http.HttpStatus;
@@ -34,6 +38,16 @@ public class AuthController implements AuthApi {
         com.openroots.openapi.model.AuthResponse data = new com.openroots.openapi.model.AuthResponse(
                 token.accessToken(), token.tokenType(), token.expiresInSeconds());
         return ResponseEntity.ok(new AuthApiResponse(true, "Authentication successful", data, now()));
+    }
+
+    @Override
+    public ResponseEntity<CurrentUserApiResponse> getCurrentUser() {
+        UserEntity user = authService.currentUser(CurrentUser.email());
+        CurrentUserResponse data = new CurrentUserResponse(
+                user.getId(),
+                user.getEmail(),
+                PlatformRole.valueOf(user.getPlatformRole().name()));
+        return ResponseEntity.ok(new CurrentUserApiResponse(true, "Current user fetched", data, now()));
     }
 
     private OffsetDateTime now() {

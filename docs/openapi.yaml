@@ -59,6 +59,20 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Return the authenticated user and their platform role
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /api/v1/projects:
     post:
       tags: [Projects]
@@ -495,6 +509,35 @@ components:
           type: string
         data:
           $ref: '#/components/schemas/AuthResponse'
+        timestamp:
+          type: string
+          format: date-time
+    PlatformRole:
+      type: string
+      enum: [USER, ADMIN]
+      description: Platform-wide role. Only ADMIN may create projects and change platform roles.
+    CurrentUserResponse:
+      type: object
+      required: [id, email, platformRole]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        platformRole:
+          $ref: '#/components/schemas/PlatformRole'
+    CurrentUserApiResponse:
+      type: object
+      required: [success, message, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/CurrentUserResponse'
         timestamp:
           type: string
           format: date-time

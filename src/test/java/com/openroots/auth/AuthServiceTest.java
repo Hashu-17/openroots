@@ -122,4 +122,20 @@ class AuthServiceTest {
         assertThat(response.tokenType()).isEqualTo("Bearer");
         assertThat(response.expiresInSeconds()).isEqualTo(900L);
     }
+
+    @Test
+    void currentUserReturnsTheAccountBehindTheToken() {
+        UserEntity user = new UserEntity("person@example.com", "hash");
+        when(userRepository.findByEmail("person@example.com")).thenReturn(Optional.of(user));
+
+        assertThat(authService.currentUser("person@example.com")).isSameAs(user);
+    }
+
+    @Test
+    void currentUserForDeletedAccountIsUnauthenticated() {
+        when(userRepository.findByEmail("gone@example.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.currentUser("gone@example.com"))
+                .isInstanceOf(org.springframework.security.authentication.AuthenticationCredentialsNotFoundException.class);
+    }
 }
