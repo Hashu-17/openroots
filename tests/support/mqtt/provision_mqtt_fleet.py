@@ -171,7 +171,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-id", help="existing OpenRoots project UUID; inferred from the smoke device if omitted")
     parser.add_argument("--count", type=int, default=100, help="number of virtual devices to create/reuse")
-    parser.add_argument("--api-url", help="OpenRoots backend URL (defaults to examples/.env or localhost)")
+    parser.add_argument("--api-url", help="OpenRoots backend URL (defaults to tests/support/mqtt/.env or localhost)")
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE,
                         help="ignored local env file containing OPENROOTS_MQTT_DEVICE_PASSWORD")
     parser.add_argument("--output", type=Path, default=DEFAULT_DEVICE_FILE,

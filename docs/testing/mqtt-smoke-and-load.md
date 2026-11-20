@@ -2,7 +2,7 @@
 
 For complete instructions to install a Linux Forgejo runner, configure the
 local stack, add Forgejo secrets, and run both workflows, see
-[`FORGEJO_LINUX_SETUP.md`](FORGEJO_LINUX_SETUP.md).
+[`forgejo-linux-setup.md`](forgejo-linux-setup.md).
 
 `mqtt_smoke_test.py` checks the full path with one registered device: it
 publishes one QoS 1 message, waits for broker acknowledgement, then polls the
@@ -22,7 +22,7 @@ schema change or a migration. The same setup works in PowerShell and bash.
 
 1. Start the local stack with `docker compose up -d --build` and make sure the
    broker, backend, and database are healthy.
-2. Copy `examples/.env.example` to `examples/.env` and set
+2. Copy `tests/support/mqtt/.env.example` to `tests/support/mqtt/.env` and set
    `OPENROOTS_MQTT_DEVICE_PASSWORD` to a test-only password. Keep it out of
    source control and do not reuse a broker admin or real device password.
 3. Find the UUID of an existing test project in the OpenRoots UI or from
@@ -30,14 +30,14 @@ schema change or a migration. The same setup works in PowerShell and bash.
    dependency, then create or reuse a 100-device fleet:
 
    ```powershell
-   python -m pip install -r examples/requirements-mqtt.txt
-   python examples/provision_mqtt_fleet.py --project-id PROJECT_UUID --count 100
+   python -m pip install -r tests/support/mqtt/requirements-mqtt.txt
+   python tests/support/mqtt/provision_mqtt_fleet.py --project-id PROJECT_UUID --count 100
    ```
 
    The script gives devices stable names (`openroots-load-test-001`, etc.),
    registers a numeric `temperature` sensor, provisions each UUID as its MQTT
    username with the shared test password, and writes their UUIDs to the
-   ignored `examples/load-devices.txt`. Re-running it reuses devices with
+   ignored `tests/support/mqtt/load-devices.txt`. Re-running it reuses devices with
    those names and resets their broker password. Broker admin credentials are
    read inside the Mosquitto container. Change `--name-prefix` to create a
    separate fleet.
@@ -53,18 +53,18 @@ schema change or a migration. The same setup works in PowerShell and bash.
 From the repository root:
 
 ```powershell
-python examples/mqtt_load_test.py --devices examples/load-devices.txt --period 10 --duration 300
+python tests/load/mqtt/mqtt_load_test.py --devices tests/support/mqtt/load-devices.txt --period 10 --duration 300
 ```
 
 The load-test script reads `OPENROOTS_MQTT_DEVICE_PASSWORD` and broker/API
-settings from `examples/.env` for local runs. Environment variables override
+settings from `tests/support/mqtt/.env` for local runs. Environment variables override
 that file.
 
 To publish multiple channels, repeat `--channel` with names registered on
 every device:
 
 ```powershell
-python examples/mqtt_load_test.py --devices examples/load-devices.txt --period 10 --duration 300 --channel temperature --channel humidity
+python tests/load/mqtt/mqtt_load_test.py --devices tests/support/mqtt/load-devices.txt --period 10 --duration 300 --channel temperature --channel humidity
 ```
 
 Defaults are 10 seconds, 120 seconds, QoS 1, and `temperature`. Configure
@@ -172,29 +172,29 @@ installation path when creating its virtual environment.
    `temperature` (unit `C`) for this smoke test. Submit, then copy the device
    UUID shown on the device card. The workflow sends a numeric value for the
    exact channel name `temperature`.
-7. Copy `examples/.env.example` to `examples/.env`, put the registered device
+7. Copy `tests/support/mqtt/.env.example` to `tests/support/mqtt/.env`, put the registered device
    UUID and a unique test password in it, then run the provisioning script:
 
    ```powershell
-   Copy-Item examples/.env.example examples/.env
-   notepad examples/.env
-   .\examples\provision_mqtt_device.ps1
+   Copy-Item tests/support/mqtt/.env.example tests/support/mqtt/.env
+   notepad tests/support/mqtt/.env
+   .\tests\support\mqtt\provision_mqtt_device.ps1
    ```
 
    The script creates the MQTT username from the device UUID and assigns the
    `device-publisher` role. It reads the admin credentials from the broker
-   container. `examples/.env` is ignored by Git; keep it local.
+   container. `tests/support/mqtt/.env` is ignored by Git; keep it local.
 8. Add two GitHub repository secrets. Go to the GitHub repo's **Settings →
    Secrets and variables → Actions → New repository secret** and create:
 
    - `MQTT_SMOKE_DEVICE_ID` — the device UUID you copied from the app.
-   - `MQTT_SMOKE_DEVICE_PASSWORD` — the password set in `examples/.env` and used by the provisioning script.
+   - `MQTT_SMOKE_DEVICE_PASSWORD` — the password set in `tests/support/mqtt/.env` and used by the provisioning script.
 
    Do not put either value in the workflow file or commit them.
 9. Push the workflow and scripts to GitHub. From the repository root:
 
    ```powershell
-   git add .github/workflows/mqtt-smoke.yml examples/README.md examples/.env.example examples/mqtt_smoke_test.py examples/mqtt_load_test.py examples/requirements-mqtt.txt .gitignore README.md
+   git add .github/workflows/mqtt-smoke.yml docs/testing/mqtt-smoke-and-load.md tests/support/mqtt/.env.example tests/e2e/mqtt/mqtt_smoke_test.py tests/load/mqtt/mqtt_load_test.py tests/support/mqtt/requirements-mqtt.txt .gitignore README.md
    git commit -m "Add GitHub MQTT smoke test"
    git push
    ```
@@ -208,23 +208,23 @@ installation path when creating its virtual environment.
 - `.github/workflows/mqtt-smoke.yml` — GitHub workflow definition. It creates
   the Python virtual environment and runs the smoke script on your Windows
   self-hosted runner.
-- `examples/mqtt_smoke_test.py` — publishes one reading and polls the backend
+- `tests/e2e/mqtt/mqtt_smoke_test.py` — publishes one reading and polls the backend
   telemetry API until that reading is stored.
-- `examples/provision_mqtt_device.ps1` — creates the local broker client from
-  `examples/.env` and assigns its publisher role.
-- `examples/provision_mqtt_fleet.py` — idempotently creates/reuses a fleet via
+- `tests/support/mqtt/provision_mqtt_device.ps1` — creates the local broker client from
+  `tests/support/mqtt/.env` and assigns its publisher role.
+- `tests/support/mqtt/provision_mqtt_fleet.py` — idempotently creates/reuses a fleet via
   the existing API, provisions matching broker clients, and writes the UUID
   list for the load test.
-- `examples/requirements-mqtt.txt` — Python MQTT client dependency installed
+- `tests/support/mqtt/requirements-mqtt.txt` — Python MQTT client dependency installed
   by the workflow.
-- `examples/mqtt_load_test.py` — the separate continuous multi-device test for
+- `tests/load/mqtt/mqtt_load_test.py` — the separate continuous multi-device test for
   later; the smoke workflow does not run this script.
-- `examples/README.md` — setup and run guide.
+- `docs/testing/mqtt-smoke-and-load.md` — setup and run guide.
 
-For a local command-line smoke run, copy `examples/.env.example` to
-`examples/.env`, fill in the device UUID and MQTT password, then run
-`python examples/mqtt_smoke_test.py` from the repository root. The real
-`examples/.env` is ignored by Git. GitHub Actions uses the two repository
+For a local command-line smoke run, copy `tests/support/mqtt/.env.example` to
+`tests/support/mqtt/.env`, fill in the device UUID and MQTT password, then run
+`python tests/e2e/mqtt/mqtt_smoke_test.py` from the repository root. The real
+`tests/support/mqtt/.env` is ignored by Git. GitHub Actions uses the two repository
 secrets instead of this local file.
 
 This is a self-hosted runner, so only run workflow code you trust on this PC.
@@ -243,7 +243,7 @@ the existing `MQTT_SMOKE_DEVICE_ID` secret unless you enter a project UUID.
 Add a separate `MQTT_LOAD_DEVICE_PASSWORD` GitHub repository secret for the
 shared password used by all fleet clients. The load workflow provisions those
 broker accounts and uses the same secret to publish; the smoke-test password
-remains separate. No per-device GitHub secrets or local `examples/.env` are
+remains separate. No per-device GitHub secrets or local `tests/support/mqtt/.env` are
 needed for Actions.
 
 The workflow installs its Python dependency in a fresh virtual environment

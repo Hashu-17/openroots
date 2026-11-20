@@ -5,11 +5,11 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not (Test-Path -LiteralPath $SettingsPath -PathType Leaf)) {
-    throw "Settings file not found: $SettingsPath. Copy examples/.env.example to examples/.env and fill in the test device credentials."
+    throw "Settings file not found: $SettingsPath. Copy tests/support/mqtt/.env.example to tests/support/mqtt/.env and fill in the test device credentials."
 }
 
 # Read only the two provisioning values. This supports the simple KEY=value
-# format used by examples/.env.example, with optional single or double quotes.
+# format used by tests/support/mqtt/.env.example, with optional single or double quotes.
 $settings = @{}
 foreach ($line in Get-Content -LiteralPath $SettingsPath) {
     if ($line -match '^\s*(MQTT_SMOKE_DEVICE_ID|MQTT_SMOKE_DEVICE_PASSWORD)\s*=\s*(.*?)\s*$') {
@@ -30,7 +30,7 @@ if ([string]::IsNullOrWhiteSpace($devicePassword)) {
     throw "Set MQTT_SMOKE_DEVICE_PASSWORD in $SettingsPath to a test password."
 }
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "../../..")).Path
 Push-Location $repoRoot
 try {
     # Pass values as positional arguments so shell characters in the password

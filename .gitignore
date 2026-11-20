@@ -10,6 +10,6 @@
 /examples/raspberry_pi/
 /.venv-mqtt-smoke/
 /.venv-mqtt-load/
-/examples/load-devices.txt
+/tests/support/mqtt/load-devices.txt
 /load-test-results/
 __pycache__/
