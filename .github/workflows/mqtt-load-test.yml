@@ -1,0 +1,120 @@
+name: MQTT load test
+
+# Manual only: it needs the local stack running on the self-hosted runner and
+# writes thousands of telemetry rows, so it must never run on push or PR.
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: Existing project UUID (leave blank to use the smoke-test device's project)
+        required: false
+        default: ''
+        type: string
+      device_count:
+        description: Number of virtual MQTT devices
+        required: true
+        default: 100
+        type: number
+      mqtt_host:
+        description: Broker address reachable from this Windows runner
+        required: true
+        default: 192.168.29.147
+        type: string
+      mqtt_port:
+        description: Published MQTT port
+        required: true
+        default: 1883
+        type: number
+      period_seconds:
+        description: Seconds between each device's messages
+        required: true
+        default: 10
+        type: number
+      duration_seconds:
+        description: Test duration in seconds
+        required: true
+        default: 300
+        type: number
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mqtt-load-test-windows
+  cancel-in-progress: false
+
+jobs:
+  load-test:
+    runs-on: [self-hosted, Windows, X64, openroots-smoke]
+    env:
+      OPENROOTS_API_URL: http://127.0.0.1:8080
+      OPENROOTS_PROJECT_ID: ${{ inputs.project_id }}
+      OPENROOTS_MQTT_DEVICE_PASSWORD: ${{ secrets.MQTT_LOAD_DEVICE_PASSWORD }}
+      MQTT_SMOKE_DEVICE_ID: ${{ secrets.MQTT_SMOKE_DEVICE_ID }}
+      OPENROOTS_MQTT_HOST: ${{ inputs.mqtt_host || '192.168.29.147' }}
+      OPENROOTS_MQTT_PORT: ${{ inputs.mqtt_port || 1883 }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Confirm local OpenRoots stack is running
+        shell: cmd
+        run: |
+          set "MOSQUITTO_RUNNING="
+          for /f "delims=" %%S in ('docker inspect --format "{{.State.Running}}" openroots-mosquitto 2^>nul') do set "MOSQUITTO_RUNNING=%%S"
+          if /i not "%MOSQUITTO_RUNNING%"=="true" (
+            echo This runner's Docker context does not see openroots-mosquitto as running.
+            echo Docker context:
+            docker context show
+            echo Containers visible to this runner:
+            docker ps -a --format "table {{.Names}}\t{{.Status}}"
+            exit /b 1
+          )
+          curl.exe --fail --silent --show-error http://127.0.0.1:8080/actuator/health >nul
+          if errorlevel 1 (
+            echo OpenRoots backend is not responding at http://127.0.0.1:8080.
+            exit /b 1
+          )
+
+      - name: Check load-test password secret
+        shell: cmd
+        run: |
+          if not defined OPENROOTS_MQTT_DEVICE_PASSWORD (
+            echo Add the MQTT_LOAD_DEVICE_PASSWORD repository secret in GitHub Settings.
+            exit /b 1
+          )
+
+      - name: Create Python environment and install MQTT client
+        shell: cmd
+        run: |
+          if not exist "%USERPROFILE%\anaconda3\python.exe" (
+            echo Python not found at %USERPROFILE%\anaconda3\python.exe
+            exit /b 1
+          )
+          "%USERPROFILE%\anaconda3\python.exe" -m venv .venv-mqtt-load
+          .venv-mqtt-load\Scripts\python.exe -m pip install -r tests/support/mqtt/requirements-mqtt.txt
+
+      - name: Create or reuse test devices and MQTT accounts
+        shell: cmd
+        run: >-
+          .venv-mqtt-load\Scripts\python.exe tests/support/mqtt/provision_mqtt_fleet.py
+          --count "${{ inputs.device_count || 100 }}"
+
+      - name: Run synchronized MQTT load
+        shell: cmd
+        run: >-
+          .venv-mqtt-load\Scripts\python.exe tests/load/mqtt/mqtt_load_test.py
+          --devices tests/support/mqtt/load-devices.txt
+          --period "${{ inputs.period_seconds || 10 }}"
+          --duration "${{ inputs.duration_seconds || 300 }}"
+          --resource-sample-interval 5
+          --resource-output load-test-results/resource-samples.csv
+
+      - name: Upload load-test resource samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mqtt-load-test-results
+          path: load-test-results/
+          if-no-files-found: warn
