@@ -69,6 +69,22 @@ public class DeviceCredentialEntity {
         revokedAt = Instant.now();
     }
 
+    public String getName() {
+        return name;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public Instant getExpiresAt() {
+        return expiresAt;
+    }
+
+    public Instant getRevokedAt() {
+        return revokedAt;
+    }
+
     public String getSecretHash() {
         return secretHash;
     }
