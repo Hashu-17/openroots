@@ -8,6 +8,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
+      // Live telemetry is served by the Go ingestion service on this branch.
+      '^/api/v1/devices/[^/]+/telemetry/live$': { target: 'http://localhost:8081', ws: true },
       '/api': 'http://localhost:8080',
     },
   },

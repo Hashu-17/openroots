@@ -39,3 +39,13 @@ export type TelemetryRecord = {
   capturedAt: string
   payload: Record<string, unknown>
 }
+
+// One stored reading pushed over the live telemetry WebSocket.
+export type LiveTelemetryEvent = {
+  type: 'telemetry.reading'
+  deviceId: string
+  sensorId: string
+  channelName: string
+  value: number
+  recordedAt: string
+}
