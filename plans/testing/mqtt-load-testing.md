@@ -13,17 +13,17 @@ database commit.
 - `.github/workflows/mqtt-smoke.yml` runs the one-message Windows smoke test.
 - `.github/workflows/mqtt-smoke2.yml` is the Linux equivalent. Each workflow
   uses a self-hosted runner and repository secrets for one test device.
-- `examples/mqtt_smoke_test.py` publishes one QoS 1 message, records its
+- `tests/e2e/mqtt/mqtt_smoke_test.py` publishes one QoS 1 message, records its
   broker PUBACK time, and polls the telemetry API until the exact reading is
   visible. This checks one end-to-end message; it does not measure fleet
   capacity or report persistence latency.
-- `examples/mqtt_load_test.py` connects one MQTT client per UUID, publishes
+- `tests/load/mqtt/mqtt_load_test.py` connects one MQTT client per UUID, publishes
   synchronized initial traffic, then repeats at a configured interval. It
   reports connected devices, acknowledged and failed publishes, publish
   rate, and mean, p95, and maximum PUBACK latency. PUBACK means the broker
   accepted the message. The script does not currently verify every message
   was persisted, report p99, or capture server CPU and memory.
-- `examples/provision_mqtt_fleet.py` now creates or reuses test devices through
+- `tests/support/mqtt/provision_mqtt_fleet.py` now creates or reuses test devices through
   the registration API, provisions their Mosquitto accounts, and writes the
   device UUID manifest. It uses the existing schema, so fleet setup needs no
   migration. Use a disposable development/test database to keep generated

@@ -38,7 +38,7 @@ node --version
 ```
 
 Conda is not used. Each workflow creates its own Python virtual environment
-and installs `paho-mqtt` from `examples/requirements-mqtt.txt`.
+and installs `paho-mqtt` from `tests/support/mqtt/requirements-mqtt.txt`.
 
 ## 2. Pull the branch onto Linux
 
@@ -65,7 +65,7 @@ Use the repository URL and authentication method for your Forgejo server.
 ## 3. Configure and start the local OpenRoots stack
 
 The root `.env` belongs next to `docker-compose.yml`. It is separate from
-`examples/.env`. On a new checkout, copy the sample once and edit it:
+`tests/support/mqtt/.env`. On a new checkout, copy the sample once and edit it:
 
 ```bash
 cp .env.example .env
@@ -152,7 +152,7 @@ Use single-line values. Keep them out of workflow files and Git. Forgejo will
 not show a saved value later; delete and recreate a secret to correct it. The
 load workflow registers or reuses devices in the project containing the smoke
 device and sets their MQTT accounts to `MQTT_LOAD_DEVICE_PASSWORD`. There are
-no per-device secrets and no `examples/.env` needed by these workflows.
+no per-device secrets and no `tests/support/mqtt/.env` needed by these workflows.
 
 ## 6. Enable Actions and register the Linux runner
 
@@ -267,7 +267,7 @@ seconds per device, and a 300-second run. Leave `project_id` blank to infer the
 project from `MQTT_SMOKE_DEVICE_ID`, or enter a project UUID.
 
 The run creates or reuses devices named `openroots-load-test-001` onward and
-writes their UUIDs to the ignored `examples/load-devices.txt` in that job's
+writes their UUIDs to the ignored `tests/support/mqtt/load-devices.txt` in that job's
 workspace. Reruns reuse the devices and reset their broker passwords. The run
 log reports connections, acknowledgements, failures, publish rate, and PUBACK
 latency. While the devices publish, it prints CPU and RAM samples for the
@@ -290,7 +290,7 @@ stored every row. Smoke separately verifies persistence for one record.
   `MQTT_PORT=1883`, and `BACKEND_PORT=8080`, then restart Compose.
 - **Missing secret:** verify the three exact secret names above under Forgejo
   repository Actions secrets. These workflows do not read GitHub secrets or
-  `examples/.env`.
+  `tests/support/mqtt/.env`.
 - **Runner logs:** `sudo journalctl -u forgejo-runner -f`.
 
 Official references: [runner binary installation](https://forgejo.org/docs/latest/admin/actions/installation/binary/), [runner registration](https://forgejo.org/docs/latest/admin/actions/registration/), [runner labels](https://forgejo.org/docs/latest/admin/actions/configuration/), [Actions secrets](https://forgejo.org/docs/latest/user/actions/basic-concepts/).

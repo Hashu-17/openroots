@@ -65,21 +65,21 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m venv .venv-forgejo-mqtt-load
-          .venv-forgejo-mqtt-load/bin/python -m pip install -r examples/requirements-mqtt.txt
+          .venv-forgejo-mqtt-load/bin/python -m pip install -r tests/support/mqtt/requirements-mqtt.txt
 
       - name: Create or reuse test devices and MQTT accounts
         shell: bash
         run: |
           set -euo pipefail
-          .venv-forgejo-mqtt-load/bin/python examples/provision_mqtt_fleet.py \
+          .venv-forgejo-mqtt-load/bin/python tests/support/mqtt/provision_mqtt_fleet.py \
             --count '${{ inputs.device_count }}'
 
       - name: Run synchronized MQTT load
         shell: bash
         run: |
           set -euo pipefail
-          .venv-forgejo-mqtt-load/bin/python examples/mqtt_load_test.py \
-            --devices examples/load-devices.txt \
+          .venv-forgejo-mqtt-load/bin/python tests/load/mqtt/mqtt_load_test.py \
+            --devices tests/support/mqtt/load-devices.txt \
             --period '${{ inputs.period_seconds }}' \
             --duration '${{ inputs.duration_seconds }}' \
             --resource-sample-interval 5 \

@@ -143,8 +143,8 @@ class ResourceSampler:
             print(f"  resource sampling warnings: {len(self.errors)}")
 
 def load_local_env() -> None:
-    """Load examples/.env for local runs without overriding workflow variables."""
-    env_file = Path(__file__).with_name(".env")
+    """Load tests/support/mqtt/.env for local runs without overriding workflow variables."""
+    env_file = Path(__file__).resolve().parents[2] / "support" / "mqtt" / ".env"
     if not env_file.is_file():
         return
     for raw_line in env_file.read_text(encoding="utf-8").splitlines():

@@ -94,19 +94,19 @@ jobs:
             exit /b 1
           )
           "%USERPROFILE%\anaconda3\python.exe" -m venv .venv-mqtt-load
-          .venv-mqtt-load\Scripts\python.exe -m pip install -r examples/requirements-mqtt.txt
+          .venv-mqtt-load\Scripts\python.exe -m pip install -r tests/support/mqtt/requirements-mqtt.txt
 
       - name: Create or reuse test devices and MQTT accounts
         shell: cmd
         run: >-
-          .venv-mqtt-load\Scripts\python.exe examples/provision_mqtt_fleet.py
+          .venv-mqtt-load\Scripts\python.exe tests/support/mqtt/provision_mqtt_fleet.py
           --count "${{ inputs.device_count || 100 }}"
 
       - name: Run synchronized MQTT load
         shell: cmd
         run: >-
-          .venv-mqtt-load\Scripts\python.exe examples/mqtt_load_test.py
-          --devices examples/load-devices.txt
+          .venv-mqtt-load\Scripts\python.exe tests/load/mqtt/mqtt_load_test.py
+          --devices tests/support/mqtt/load-devices.txt
           --period "${{ inputs.period_seconds || 10 }}"
           --duration "${{ inputs.duration_seconds || 300 }}"
           --resource-sample-interval 5
