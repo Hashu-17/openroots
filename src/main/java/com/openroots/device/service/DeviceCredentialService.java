@@ -1,17 +1,25 @@
 package com.openroots.device.service;
 
 import com.openroots.device.dto.DeviceCredentialResponse;
+import com.openroots.device.dto.DeviceCredentialSummary;
 import com.openroots.device.model.DeviceCredentialEntity;
 import com.openroots.device.model.DeviceEntity;
 import com.openroots.device.repository.DeviceCredentialRepository;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Device credentials belong to one device and are separate from human credentials (BR-011).
+ * Secrets are random, returned once, and stored only as hashes (BR-012). Only project
+ * OWNER/ADMIN may manage them. Revoked or expired credentials are inactive (BR-013) and
+ * rotation replaces the secret without changing the device identity (BR-014).
+ */
 @Service
 public class DeviceCredentialService {
 
@@ -30,27 +38,56 @@ public class DeviceCredentialService {
     }
 
     @Transactional
-    public DeviceCredentialResponse create(String email, UUID projectId, UUID deviceId, String name) {
-        DeviceEntity device = deviceService.findByIdForManage(email, projectId, deviceId);
-        String secret = generateSecret();
-        DeviceCredentialEntity credential = credentialRepository.save(
-                new DeviceCredentialEntity(device, name.trim(), passwordEncoder.encode(secret), null));
-        return new DeviceCredentialResponse(credential.getId(), name.trim(), secret, null);
+    public List<DeviceCredentialSummary> list(String email, UUID projectId, UUID deviceId) {
+        deviceService.findByIdForManage(email, projectId, deviceId);
+        Instant now = Instant.now();
+        return credentialRepository.findAllByDevice_IdOrderByCreatedAtDesc(deviceId).stream()
+                .map(credential -> new DeviceCredentialSummary(
+                        credential.getId(),
+                        credential.getName(),
+                        credential.getCreatedAt(),
+                        credential.getExpiresAt(),
+                        credential.getRevokedAt(),
+                        credential.isActive(now)))
+                .toList();
     }
 
     @Transactional
+    public DeviceCredentialResponse create(
+            String email, UUID projectId, UUID deviceId, String name, Instant expiresAt) {
+        DeviceEntity device = deviceService.findByIdForManage(email, projectId, deviceId);
+        if (expiresAt != null && !expiresAt.isAfter(Instant.now())) {
+            throw new IllegalArgumentException("Credential expiry must be in the future");
+        }
+        return issue(device, name.trim(), expiresAt);
+    }
+
+    /** Revokes the credential and issues a replacement with the same name and expiry. */
+    @Transactional
     public DeviceCredentialResponse rotate(String email, UUID projectId, UUID deviceId, UUID credentialId) {
-        revoke(email, projectId, deviceId, credentialId);
-        return create(email, projectId, deviceId, "rotated");
+        DeviceEntity device = deviceService.findByIdForManage(email, projectId, deviceId);
+        DeviceCredentialEntity current = activeCredential(deviceId, credentialId);
+        current.revoke();
+        return issue(device, current.getName(), current.getExpiresAt());
     }
 
     @Transactional
     public void revoke(String email, UUID projectId, UUID deviceId, UUID credentialId) {
         deviceService.findByIdForManage(email, projectId, deviceId);
-        DeviceCredentialEntity credential = credentialRepository.findByIdAndDevice_Id(credentialId, deviceId)
-                .filter(item -> item.isActive(Instant.now()))
+        activeCredential(deviceId, credentialId).revoke();
+    }
+
+    private DeviceCredentialEntity activeCredential(UUID deviceId, UUID credentialId) {
+        return credentialRepository.findByIdAndDevice_Id(credentialId, deviceId)
+                .filter(credential -> credential.isActive(Instant.now()))
                 .orElseThrow(() -> new IllegalArgumentException("Credential is not active"));
-        credential.revoke();
+    }
+
+    private DeviceCredentialResponse issue(DeviceEntity device, String name, Instant expiresAt) {
+        String secret = generateSecret();
+        DeviceCredentialEntity credential = credentialRepository.save(
+                new DeviceCredentialEntity(device, name, passwordEncoder.encode(secret), expiresAt));
+        return new DeviceCredentialResponse(credential.getId(), name, secret, expiresAt);
     }
 
     private String generateSecret() {

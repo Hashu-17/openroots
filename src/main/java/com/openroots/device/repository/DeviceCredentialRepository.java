@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface DeviceCredentialRepository extends JpaRepository<DeviceCredentialEntity, UUID> {
 
-    List<DeviceCredentialEntity> findAllByDevice_Id(UUID deviceId);
+    List<DeviceCredentialEntity> findAllByDevice_IdOrderByCreatedAtDesc(UUID deviceId);
 
     java.util.Optional<DeviceCredentialEntity> findByIdAndDevice_Id(UUID id, UUID deviceId);
 }
