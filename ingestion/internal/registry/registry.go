@@ -149,6 +149,12 @@ func (r *Registry) Device(deviceID string) (DeviceSchema, bool) {
 	return schema, exists
 }
 
+// ProjectOf returns the project that owns a registered device.
+func (r *Registry) ProjectOf(deviceID string) (string, bool) {
+	device, exists := r.Device(deviceID)
+	return device.ProjectID, exists
+}
+
 func (r *Registry) Devices() []Device {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

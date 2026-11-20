@@ -2,8 +2,17 @@
 
 The Go service subscribes to authenticated device topics on Mosquitto, validates
 messages against the registered device and sensor schemas it fetches from
-Spring, and writes accepted readings to TimescaleDB. Its history API and simple
-HTML viewer listen on port `8081` inside the Compose network.
+Spring, and writes accepted readings to TimescaleDB. It also serves two
+authenticated endpoints on port `8081` (published to `127.0.0.1` by Compose):
+
+- `GET /api/v1/devices/{deviceID}/telemetry?from=...&to=...` for bounded history.
+- `GET /api/v1/devices/{deviceID}/telemetry/live`, a WebSocket that streams
+  readings as they are committed.
+
+Both check the same access token and project membership as Spring's REST API
+(`OPENROOTS_JWT_SECRET` must match Spring's). The frontend reaches the live
+socket through the reverse proxy. See
+[live telemetry contract](../docs/contracts/live-telemetry.md).
 
 ## Raspberry Pi publisher on a trusted LAN
 
@@ -50,10 +59,10 @@ HTML viewer listen on port `8081` inside the Compose network.
    publish confirms Mosquitto accepted the credential and topic ACL. Go refreshes
    the registered device/sensor schema every few seconds; if the Pi publishes
    immediately after registration, wait briefly and retry if the service has
-   not refreshed yet. On the server, open `http://localhost:8081/viewer`, select
-   the project and device, and load the last 24 hours to confirm that Go stored
-   the readings. Readings from one MQTT payload are displayed together at their
-   shared capture time.
+   not refreshed yet. To confirm Go stored the readings, sign in to the web app
+   at `http://localhost:5173`, open the device's telemetry panel (it shows
+   **Live** while streaming), or call the authenticated history endpoint above
+   with a bearer token. Readings from one MQTT payload share one capture time.
 
 The initial LAN setup uses plain MQTT without TLS and is intended for a trusted
 development network only. Do not expose the broker or development API directly

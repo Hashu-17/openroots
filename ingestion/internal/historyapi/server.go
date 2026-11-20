@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	_ "embed"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -15,8 +15,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/openroots/ingestion/internal/auth"
 	"github.com/openroots/ingestion/internal/live"
-	"github.com/openroots/ingestion/internal/registry"
 	"github.com/openroots/ingestion/internal/storage"
 )
 
@@ -31,13 +31,10 @@ const (
 
 var canonicalUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-//go:embed viewer.html
-var viewerHTML []byte
-
 type Server struct {
-	registry *registry.Registry
-	store    *storage.Store
-	logger   *log.Logger
+	authorizer *auth.Authorizer
+	store      *storage.Store
+	logger     *log.Logger
 }
 
 type cursorPayload struct {
@@ -53,31 +50,25 @@ type historyResponse struct {
 	Next     string                   `json:"nextCursor,omitempty"`
 }
 
+// New serves health, authenticated telemetry history, and the authenticated live
+// WebSocket. Reads follow Spring's rule: the caller's access token must belong to a
+// member of the device's project; anyone else gets "device not found".
 func New(
 	addr string,
-	deviceRegistry *registry.Registry,
+	authorizer *auth.Authorizer,
 	store *storage.Store,
 	hub *live.Hub,
 	allowedOrigins []string,
 	logger *log.Logger,
 ) *http.Server {
-	api := &Server{registry: deviceRegistry, store: store, logger: logger}
+	api := &Server{authorizer: authorizer, store: store, logger: logger}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write([]byte("ok\n"))
 	})
-	mux.HandleFunc("GET /api/v1/catalog", func(writer http.ResponseWriter, _ *http.Request) {
-		writeJSON(writer, http.StatusOK, map[string]any{"devices": deviceRegistry.Devices()})
-	})
-	mux.HandleFunc("GET /viewer", func(writer http.ResponseWriter, _ *http.Request) {
-		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-		writer.Header().Set("Cache-Control", "no-store")
-		writer.WriteHeader(http.StatusOK)
-		_, _ = writer.Write(viewerHTML)
-	})
 	mux.HandleFunc("GET /api/v1/devices/{deviceID}/telemetry", api.getDeviceHistory)
-	mux.HandleFunc("GET /api/v1/devices/{deviceID}/telemetry/live", live.Handler(deviceRegistry, hub, allowedOrigins, logger))
+	mux.HandleFunc("GET /api/v1/devices/{deviceID}/telemetry/live", live.Handler(authorizer, hub, allowedOrigins, logger))
 	mux.HandleFunc("/", func(writer http.ResponseWriter, _ *http.Request) {
 		writeError(writer, http.StatusNotFound, "route not found")
 	})
@@ -98,8 +89,21 @@ func (s *Server) getDeviceHistory(writer http.ResponseWriter, request *http.Requ
 		writeError(writer, http.StatusBadRequest, "deviceID must be a lowercase canonical UUID")
 		return
 	}
-	if _, exists := s.registry.Device(deviceID); !exists {
-		writeError(writer, http.StatusNotFound, "device not found")
+	token := auth.BearerToken(request)
+	if token == "" {
+		writeError(writer, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	if _, err := s.authorizer.AuthorizeRead(request.Context(), token, deviceID); err != nil {
+		switch {
+		case errors.Is(err, auth.ErrInvalidToken):
+			writeError(writer, http.StatusUnauthorized, "invalid or expired access token")
+		case errors.Is(err, auth.ErrNotVisible):
+			writeError(writer, http.StatusNotFound, "device not found")
+		default:
+			s.logger.Printf("authorization check failed for device %s: %v", deviceID, err)
+			writeError(writer, http.StatusServiceUnavailable, "authorization is unavailable")
+		}
 		return
 	}
 

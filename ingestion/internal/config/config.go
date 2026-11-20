@@ -19,6 +19,7 @@ type Config struct {
 	DatabasePassword   string
 	RegistryURL        string
 	RegistryAPIKey     string
+	JWTSecret          string
 	HTTPAddr           string
 	AllowedOrigins     []string
 	RegistrySyncEvery  time.Duration
@@ -39,6 +40,7 @@ func Load() (Config, error) {
 		DatabasePassword:   os.Getenv("DATABASE_PASSWORD"),
 		RegistryURL:        os.Getenv("REGISTRY_URL"),
 		RegistryAPIKey:     os.Getenv("REGISTRY_API_KEY"),
+		JWTSecret:          os.Getenv("OPENROOTS_JWT_SECRET"),
 		HTTPAddr:           valueOr("INGESTION_HTTP_ADDR", ":8081"),
 		AllowedOrigins:     listOr("INGESTION_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"),
 		RegistrySyncEvery:  3 * time.Second,
@@ -57,6 +59,7 @@ func Load() (Config, error) {
 		"DATABASE_PASSWORD":  cfg.DatabasePassword,
 		"REGISTRY_URL":       cfg.RegistryURL,
 		"REGISTRY_API_KEY":   cfg.RegistryAPIKey,
+		"OPENROOTS_JWT_SECRET": cfg.JWTSecret,
 	} {
 		if val == "" {
 			return Config{}, fmt.Errorf("%s is required", name)
