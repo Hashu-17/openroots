@@ -1,5 +1,6 @@
 package com.openroots.telemetry.controller;
 
+import com.openroots.auth.CurrentUser;
 import com.openroots.openapi.api.TelemetryApi;
 import com.openroots.openapi.model.TelemetryApiResponse;
 import com.openroots.openapi.model.TelemetryIngestRequest;
@@ -29,7 +30,7 @@ public class TelemetryController implements TelemetryApi {
 
     @Override
     public ResponseEntity<TelemetryApiResponse> ingestTelemetry(TelemetryIngestRequest request) {
-        TelemetryRecord record = telemetryService.ingest(toServiceRequest(request));
+        TelemetryRecord record = telemetryService.ingest(CurrentUser.email(), toServiceRequest(request));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new TelemetryApiResponse(true, "Telemetry ingested", toResponse(record), now()));
     }
@@ -37,8 +38,8 @@ public class TelemetryController implements TelemetryApi {
     @Override
     public ResponseEntity<TelemetryListApiResponse> listTelemetry(UUID deviceId) {
         List<TelemetryRecord> records = deviceId == null
-                ? telemetryService.findAll()
-                : telemetryService.findByDevice(deviceId);
+                ? telemetryService.findAll(CurrentUser.email())
+                : telemetryService.findByDevice(CurrentUser.email(), deviceId);
         List<TelemetryResponse> responses = records.stream()
                 .map(this::toResponse)
                 .toList();

@@ -1,5 +1,6 @@
 package com.openroots.device.controller;
 
+import com.openroots.auth.CurrentUser;
 import com.openroots.device.model.DeviceEntity;
 import com.openroots.device.service.DeviceService;
 import com.openroots.openapi.api.DevicesApi;
@@ -28,14 +29,14 @@ public class DeviceController implements DevicesApi {
 
     @Override
     public ResponseEntity<DeviceApiResponse> registerDevice(UUID projectId, DeviceCreateRequest request) {
-        DeviceEntity device = deviceService.register(projectId, toServiceRequest(request));
+        DeviceEntity device = deviceService.register(CurrentUser.email(), projectId, toServiceRequest(request));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new DeviceApiResponse(true, "Device registered", toResponse(device), now()));
     }
 
     @Override
     public ResponseEntity<DeviceListApiResponse> listProjectDevices(UUID projectId) {
-        List<DeviceResponse> devices = deviceService.findByProject(projectId).stream()
+        List<DeviceResponse> devices = deviceService.findByProject(CurrentUser.email(), projectId).stream()
                 .map(this::toResponse)
                 .toList();
 
@@ -44,13 +45,13 @@ public class DeviceController implements DevicesApi {
 
     @Override
     public ResponseEntity<DeviceApiResponse> getDevice(UUID projectId, UUID deviceId) {
-        DeviceResponse device = toResponse(deviceService.findById(projectId, deviceId));
+        DeviceResponse device = toResponse(deviceService.findById(CurrentUser.email(), projectId, deviceId));
         return ResponseEntity.ok(new DeviceApiResponse(true, "Device fetched", device, now()));
     }
 
     @Override
     public ResponseEntity<VoidApiResponse> deleteDevice(UUID projectId, UUID deviceId) {
-        deviceService.delete(projectId, deviceId);
+        deviceService.delete(CurrentUser.email(), projectId, deviceId);
         return ResponseEntity.ok(new VoidApiResponse(true, "Device deleted", null, now()));
     }
 
