@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react' // I used 4 hooks here (react hooks are functions that let use React features in functional components)
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { api } from './api/client'
+import { api, session, SESSION_EXPIRED_EVENT } from './api/client'
+import AuthScreen from './views/AuthScreen'
 import ProjectsIndex from './views/ProjectsIndex'
 import ProjectWorkspace from './views/ProjectWorkspace'
-import type { Device, Project, TelemetryRecord } from './types/api'
+import type { CurrentUser, Device, Project, TelemetryRecord } from './types/api'
 
-/*  
-This is where the app starts. 
+/*
+This is where the app starts.
 It owns the data shared by multiple screens and decides which main screen is visible. (state management)
-The two main screens are the project index and project workspace for a single project. Each screen handles its own UI, but App manages the shared state and server communication.
+Without an access token it shows the sign-in screen; with one it shows the workspace.
+The two main workspace screens are the project index and project workspace for a single project. Each screen handles its own UI, but App manages the shared state and server communication.
 
 */
 
@@ -17,6 +19,9 @@ type View = 'projects' | 'project'
 
 export default function App() {
 //const [statevalue, setStateValue] = useState(initialValue) is a hook that lets you add state to functional components.
+  const [accessToken, setAccessToken] = useState<string | null>(() => session.getToken())
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
+  const [authError, setAuthError] = useState('')
   const [projects, setProjects] = useState<Project[]>([])
   const [devices, setDevices] = useState<Device[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
@@ -33,14 +38,40 @@ export default function App() {
   const loadedDevicesProjectId = useRef('')
   const selectedProject = projects.find((project) => project.id === selectedProjectId)
 
+  // Forget everything that belongs to the previous session.
+  const resetWorkspace = useCallback(() => {
+    setCurrentUser(null)
+    setProjects([])
+    setDevices([])
+    setSelectedProjectId('')
+    setView('projects')
+    setProjectsError('')
+    setProjectsLoading(true)
+    setTelemetryDevice(null)
+    loadedDevicesProjectId.current = ''
+  }, [])
 
-  useEffect(() => {  
+  // The API client fires this when the backend rejects our token.
+  useEffect(() => {
+    function handleSessionExpired() {
+      setAccessToken(null)
+      resetWorkspace()
+      setAuthError('Your session has expired. Please sign in again.')
+    }
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired)
+  }, [resetWorkspace])
+
+  // Load who is signed in and the projects they can see whenever a session starts.
+  useEffect(() => {
+    if (!accessToken) return
     let active = true
-    async function loadProjects() {
+    async function loadSession() {
       try {
-        const nextProjects = await api.listProjects()
+        const [user, nextProjects] = await Promise.all([api.me(), api.listProjects()])
         if (!active) return
         nextProjects.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+        setCurrentUser(user)
         setProjects(nextProjects)
         setSelectedProjectId((current) => current || nextProjects[0]?.id || '')
       } catch (cause) {
@@ -49,12 +80,12 @@ export default function App() {
         if (active) setProjectsLoading(false)
       }
     }
-    void loadProjects()
+    void loadSession()
     return () => { active = false }
-  }, [])
+  }, [accessToken])
 
 
-  const reloadDevices = useCallback(async () => {  
+  const reloadDevices = useCallback(async () => {
     if (!selectedProjectId) {
       setDevices([])
       return
@@ -74,8 +105,20 @@ export default function App() {
     }
   }, [selectedProjectId])
 
-  
+
   useEffect(() => { if (view === 'project' && selectedProjectId) void reloadDevices()}, [reloadDevices, selectedProjectId, view] )
+
+  function signIn(token: string) {
+    session.setToken(token)
+    setAuthError('')
+    setAccessToken(token)
+  }
+
+  function signOut() {
+    session.clear()
+    setAccessToken(null)
+    resetWorkspace()
+  }
 
   function openProject(projectId: string) {
     setSelectedProjectId(projectId)
@@ -84,7 +127,7 @@ export default function App() {
     setDevicesNotice('')
   }
 
-  async function showTelemetry(device: Device) { 
+  async function showTelemetry(device: Device) {
     setTelemetryDevice(device)
     setTelemetry([])
     setTelemetryError('')
@@ -98,7 +141,7 @@ export default function App() {
     }
   }
 
-  async function deleteDevice(deviceId: string) { 
+  async function deleteDevice(deviceId: string) {
     const device = devices.find((item) => item.id === deviceId)
     if (!device || !window.confirm(`Delete ${device.name}? This permanently removes its sensors and telemetry.`)) return
     setDevicesError('')
@@ -112,6 +155,11 @@ export default function App() {
     }
   }
 
+  // No token: show the sign-in screen. The key resets the form after a sign-out or expiry.
+  if (!accessToken) {
+    return <AuthScreen key={authError} onAuthenticated={signIn} initialError={authError} />
+  }
+
   // App switches between the project index and workspace only for now; each view handles its own screen UI.
   //  !! pls change ternary logic to switch statement if more views are added in the future !!
   return <Tooltip.Provider delayDuration={300}><div className="min-h-screen bg-[#101416] text-[#e7ebe7]">
@@ -121,7 +169,12 @@ export default function App() {
           <span className="grid size-9 place-items-center bg-[#e6b85a] font-mono text-xs font-extrabold text-[#101416]">OR</span>
           <span><span className="block font-mono text-[10px] font-bold uppercase tracking-[.14em] text-[#7f908e]">OpenRoots / Control</span><span className="font-display text-lg font-bold text-[#f1f3ed] transition group-hover:text-[#e6b85a]">Operations</span></span>
         </button>
-        <div className="flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[.1em] text-[#7f908e]"><span className="size-2 rounded-full bg-[#41c7a1] shadow-[0_0_0_4px_rgba(65,199,161,.12)]" /><span className="hidden sm:inline">Development workspace</span></div>
+        <div className="flex items-center gap-3 font-mono text-[10px] font-semibold uppercase tracking-[.1em] text-[#7f908e]">
+          <span className="size-2 rounded-full bg-[#41c7a1] shadow-[0_0_0_4px_rgba(65,199,161,.12)]" />
+          {currentUser && <span className="hidden normal-case tracking-normal text-[#b5c1be] sm:inline">{currentUser.email}</span>}
+          {currentUser?.platformRole === 'ADMIN' && <span className="bg-[#2c2617] px-1.5 py-0.5 text-[9px] text-[#e6b85a]">Admin</span>}
+          <button className="border border-[#394345] px-2 py-1 text-[#b5c1be] transition hover:border-[#e6b85a] hover:text-[#e6b85a]" onClick={signOut} type="button">Sign out</button>
+        </div>
       </div>
     </header>
     <main className="mx-auto max-w-[1280px] px-6 pb-16 pt-10 sm:px-10 sm:pt-14">
@@ -147,6 +200,6 @@ export default function App() {
           onCloseTelemetry={() => setTelemetryDevice(null)}
         />}
     </main>
-    <footer className="border-t border-[#2a3335] bg-[#141a1c]"><div className="mx-auto flex max-w-[1280px] flex-col gap-1 px-6 py-5 font-mono text-[10px] text-[#667674] sm:flex-row sm:items-center sm:justify-between sm:px-10"><span>OpenRoots local control surface</span><span>API /api/v1 · Persistence online</span></div></footer>
+    <footer className="border-t border-[#2a3335] bg-[#141a1c]"><div className="mx-auto flex max-w-[1280px] flex-col gap-1 px-6 py-5 font-mono text-[10px] text-[#667674] sm:flex-row sm:items-center sm:justify-between sm:px-10"><span>OpenRoots local control surface</span><span>API /api/v1 · Signed in</span></div></footer>
   </div></Tooltip.Provider>
 }
