@@ -12,6 +12,8 @@ sequenceDiagram
     participant Spring as Spring backend
     participant Workers as Go storage workers
     participant Store as TimescaleDB / PostgreSQL
+    participant Hub as Go live hub
+    participant Browser as Signed-in browser
 
     loop every few seconds
         Registry->>Spring: GET /internal/v1/ingestion/device-registry (shared key)
@@ -24,6 +26,8 @@ sequenceDiagram
     Consumer->>Workers: Queue validated readings (bounded queue)
     Workers->>Store: Upsert readings and mark device online in one transaction
     Store-->>Workers: Committed
+    Workers-)Hub: Publish the committed readings
+    Hub-)Browser: telemetry.reading over the authenticated WebSocket
     Workers-->>Broker: Acknowledge the MQTT message
 ```
 

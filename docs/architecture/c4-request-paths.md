@@ -5,11 +5,13 @@ It shows how a future React dashboard could use the Spring Boot business API for
 project and device-management operations while using a separate Go telemetry API
 for bounded historical telemetry queries and live-reading updates.
 
-The Spring Boot API and React frontend exist on the current branch. The Go
-telemetry API, historical TimescaleDB query path, and dashed live-update path are
-proposed and are not implemented in the current Compose deployment. The diagram
-also includes account settings as a future frontend request category; user
-authentication and account management are not currently enabled.
+The Spring Boot API and React frontend exist on the current branch, and every
+request carries the signed-in user's access token. The Go telemetry API is
+implemented on this branch: its live-update path (dashed) is an authenticated
+WebSocket that the frontend uses, and its bounded history endpoint is available
+but the frontend still reads history from the Spring REST API. Go checks the same
+access token and project membership as Spring. The diagram also includes account
+settings as a future frontend request category.
 
 Use the implemented C4 views in the [architecture index](README.md) for the
 current system boundaries, containers, and components. Use this view when

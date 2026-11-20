@@ -1,6 +1,6 @@
 # level 2: containers
 
-The platform runs as five application containers in Docker Compose. The browser loads the React UI from Nginx; Nginx serves the static app and proxies `/api/` requests to Spring Boot. Devices publish MQTT messages to Mosquitto; the Go ingestion service consumes them, validates them against the device registry it reads from Spring, and writes readings to TimescaleDB. Spring persists application data and serves telemetry reads.
+The platform runs as five application containers in Docker Compose. The browser loads the React UI from Nginx; Nginx serves the static app and proxies `/api/` requests to Spring Boot. Devices publish MQTT messages to Mosquitto; the Go ingestion service consumes them, validates them against the device registry it reads from Spring, and writes readings to TimescaleDB. It also streams new readings to open browsers over an authenticated WebSocket. Spring persists application data, serves telemetry reads, and keeps each device's MQTT login in step with its credentials.
 
 ```mermaid
 flowchart LR
@@ -20,6 +20,8 @@ flowchart LR
     web -->|"/api/v1 · HTTP/JSON<br/>Nginx proxy"| backend
     device -->|"Publishes telemetry<br/>MQTT"| broker
     broker -->|"Delivers subscribed messages<br/>MQTT"| ingestion
+    web -->|"Live WebSocket<br/>Nginx proxy"| ingestion
+    backend -->|"Manages device logins<br/>MQTT dynamic security"| broker
     ingestion -->|"Device registry · HTTP"| backend
     ingestion -->|"Writes telemetry · pgx"| database
     backend -->|"Reads and writes · JDBC"| database

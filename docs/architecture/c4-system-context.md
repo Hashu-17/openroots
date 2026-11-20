@@ -22,4 +22,4 @@ flowchart LR
     class openroots system;
 ```
 
-Authentication is not currently enforced by the Spring security configuration; see [authentication status](../security/authentication.md).
+Every REST request needs a signed-in user's access token, and devices authenticate to the MQTT broker with their own credentials; see [authentication status](../security/authentication.md).

@@ -23,6 +23,8 @@ flowchart LR
     ingestion -->|"Device registry · backend:8080"| backend
     ingestion -->|"pgx"| database
     backend -->|"JDBC"| database
+    backend -->|"Device logins · dynamic security"| broker
+    frontend -->|"live WebSocket · ingestion:8081"| ingestion
 
     classDef client fill:#08427b,color:#fff,stroke:#052e56,stroke-width:2px;
     classDef external fill:#999999,color:#fff,stroke:#666,stroke-width:2px;
