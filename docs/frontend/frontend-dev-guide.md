@@ -7,8 +7,10 @@ The frontend is a React 19 single page application written in TypeScript and bun
 1. Listing projects.
 2. Opening one project.
 3. Listing and registering devices in that project.
-4. Viewing device telemetry.
+4. Viewing device telemetry, including new readings as they arrive.
 5. Deleting devices.
+6. Signing in and out (every API call needs a signed-in user).
+7. Creating projects (platform administrators only).
 
 ## Pre requisites
 
@@ -259,6 +261,16 @@ A telemetry record has:
 
 `payload` is a dictionary. `Object.entries(payload)` converts that dictionary into channel/value pairs for display.
 
+### Sign-in types
+
+- `AuthResponse`: returned by login. It holds `accessToken`, `tokenType` and `expiresInSeconds`.
+- `PlatformRole`: `'USER'` or `'ADMIN'`. Only `ADMIN` may create projects; project roles are separate and are enforced by the backend.
+- `CurrentUser`: returned by `GET /api/v1/auth/me`, with `id`, `email` and `platformRole`.
+
+### `LiveTelemetryEvent`
+
+One stored reading pushed over the live WebSocket: `type` (always `'telemetry.reading'`), `deviceId`, `sensorId`, `channelName`, `value` and `recordedAt`. Unlike `TelemetryRecord`, it carries a single channel; the frontend groups events with the same timestamp into one record.
+
 ## 5. API layer: `src/api/client.ts`
 
 The API layer keeps URLs and response-envelope handling out of the components.
@@ -301,17 +313,34 @@ This is the shared asynchronous HTTP function.
 13. If `data` is an array, it is treated as validation details and appended to the error message.
 14. Successful requests return `body.data`, so components receive useful data rather than the envelope.
 
+Authentication is handled in the same function. If a token is stored, every request sends it as `Authorization: Bearer <token>`. If the backend answers `401` to a request that sent a token, the token is cleared and a `SESSION_EXPIRED_EVENT` is dispatched; `App` listens for it and returns to the sign-in screen. A `401` from the login form itself (no token sent) is just a failed sign-in.
+
+The access token is kept in `localStorage` under `openroots.accessToken` through the small `session` object (`getToken`, `setToken`, `clear`), so a page reload keeps the user signed in until the token expires.
+
 The `catch` blocks in components receive these thrown errors and convert them into visible UI messages.
 
 ### Named API functions
 
+- `login`: `POST /api/v1/auth/login`.
+- `register`: `POST /api/v1/auth/register`.
+- `me`: `GET /api/v1/auth/me`.
 - `listProjects`: `GET /api/v1/projects`.
+- `createProject`: `POST /api/v1/projects` (platform administrators only; others get `403`).
 - `listProjectDevices`: `GET /api/v1/projects/{projectId}/devices`.
 - `registerDevice`: `POST /api/v1/projects/{projectId}/devices`.
 - `deleteDevice`: `DELETE /api/v1/projects/{projectId}/devices/{deviceId}`.
 - `listTelemetry`: `GET /api/v1/telemetry?deviceId=...`.
 
 `encodeURIComponent` protects the telemetry query parameter when constructing the URL.
+
+### Live telemetry: `src/api/live.ts`
+
+This file is separate from `client.ts` because a WebSocket is a long-lived connection rather than one request and one response. The protocol is documented in the [live telemetry contract](../contracts/live-telemetry.md).
+
+- `openLiveTelemetry(deviceId, getToken, onReading, onStatus)` opens `/api/v1/devices/{id}/telemetry/live`, sends `{"type":"auth","token":...}` as its first message (browsers cannot set headers on a WebSocket, and tokens must not appear in URLs), and reports `connecting`, `live` or `offline`. It returns a function that closes the connection.
+- After a dropped connection it reconnects every three seconds, except after close codes 4400, 4401 and 4404 (bad request, invalid or expired token, device not visible), where retrying cannot help.
+- `mergeLiveReading(records, event)` folds one event into the newest-first record list. Events with the same timestamp are combined into one record, whatever the timestamp's formatting, and late events are placed in time order.
+- `liveTelemetryUrl` builds the `ws://` or `wss://` URL from the page's own address, so the same code works behind the Vite dev proxy and the Nginx container.
 
 ## 6. The top-level component: `App.tsx`
 
@@ -327,6 +356,9 @@ This is a TypeScript union. `view` cannot accidentally become an arbitrary strin
 
 ### State variables
 
+- `accessToken`: the signed-in user's token, read from `session` on startup. `null` means the sign-in screen is shown.
+- `currentUser`: the signed-in user from `api.me()`; its `platformRole` decides whether project creation is offered.
+- `authError`: message shown on the sign-in screen, for example after a session expired.
 - `projects`: all projects loaded from the backend.
 - `devices`: devices belonging to the selected project.
 - `selectedProjectId`: the currently active project ID.
@@ -340,6 +372,7 @@ This is a TypeScript union. `view` cannot accidentally become an arbitrary strin
 - `telemetry`: fetched records for that device.
 - `telemetryLoading`: telemetry request status.
 - `telemetryError`: telemetry error message.
+- `liveStatus`: `connecting`, `live` or `offline`, for the open telemetry panel.
 - `loadedDevicesProjectId`: a `useRef` value used to distinguish first device load from refreshes.
 
 ### `selectedProject`
@@ -354,7 +387,7 @@ const selectedProject = projects.find(
 
 ### Initial project-loading `useEffect`
 
-This effect runs once because its dependency array is empty.
+This effect runs whenever `accessToken` changes and does nothing without one, so projects load right after sign-in. It also loads `currentUser` with `api.me()` in parallel using `Promise.all`.
 
 ```ts
 let active = true
@@ -362,17 +395,17 @@ let active = true
 
 The flag prevents a late network response from updating state after unmount. The cleanup function sets it to `false`.
 
-`loadProjects`:
+`loadSession`:
 
-1. Awaits `api.listProjects()`.
+1. Awaits `api.me()` and `api.listProjects()` together.
 2. Stops if the component was unmounted.
 3. Sorts projects newest-first using `Date.parse`.
-4. Stores the projects.
+4. Stores the user and the projects.
 5. Selects the first project only if no project is already selected.
 6. Catches and displays an error.
 7. Clears the loading state in `finally`, whether the request succeeded or failed.
 
-`void loadProjects()` intentionally starts the async function without making the effect itself async. React effects should return either nothing or a cleanup function, not a Promise.
+`void loadSession()` intentionally starts the async function without making the effect itself async. React effects should return either nothing or a cleanup function, not a Promise.
 
 ### `reloadDevices`
 
@@ -422,6 +455,21 @@ This async function:
 6. Displays an error if the request fails.
 7. Always clears the loading state.
 
+### Signing in and out
+
+- `signIn(token)` stores the token with `session.setToken` and updates `accessToken`.
+- `signOut()` clears the stored token and `accessToken`, and calls `resetWorkspace` so nothing from the previous user remains in memory.
+- A separate effect listens for `SESSION_EXPIRED_EVENT`. When the backend rejects the token it signs the user out and sets `authError` to "Your session has expired. Please sign in again."
+- While `accessToken` is `null`, `App` renders [`AuthScreen`](../src/views/AuthScreen.tsx) instead of the workspace. `AuthScreen` is one screen with a sign-in and a register mode; registering does not sign the user in, it switches back to the sign-in form. Its `key` is `authError`, so the form resets after a sign-out or expiry.
+
+### `createProject`
+
+Called by `ProjectsIndex` for platform administrators. It awaits `api.createProject`, adds the new project to the top of the list, and selects it if nothing was selected. Non-administrators never see the form, and the backend answers `403` if one is attempted.
+
+### Live telemetry `useEffect`
+
+While a device's telemetry panel is open, this effect calls `openLiveTelemetry` for that device. Each event is merged into `telemetry` with `mergeLiveReading`, and the connection status goes to `liveStatus`. The cleanup function closes the socket when the panel closes, another device is opened, or the token changes. History still comes from `showTelemetry`; the live feed adds readings that arrive afterwards.
+
 ### `deleteDevice`
 
 This async function:
@@ -442,9 +490,9 @@ This async function:
 1. A Radix tooltip provider.
 2. A page wrapper with dark background and light text.
 3. A header containing the OpenRoots brand button.
-4. A status indicator saying “Development workspace”.
+4. A status indicator, an "Admin" badge for platform administrators, and a Sign out button.
 5. Either `ProjectsIndex` or `ProjectWorkspace`.
-6. A footer describing the API and persistence state.
+6. A footer describing the API and the signed-in state.
 
 The header brand button returns to the project index but does not clear the selected project or loaded data.
 
@@ -480,6 +528,8 @@ The props include project data, device data, telemetry data, and callbacks. The 
 - `App` owns shared data and network actions.
 - `ProjectWorkspace` owns screen-level tab state.
 - child components receive callbacks instead of directly owning shared application data.
+
+The props also include `liveStatus`, which the workspace passes straight to `TelemetryPanel`.
 
 ### `ProjectTab`
 
@@ -619,10 +669,11 @@ Formats a timestamp with month, day, hour, minute, and second.
 
 The panel renders:
 
-1. An error banner, if present.
-2. A loading spinner while fetching.
-3. A no-data message when there are no records.
-4. A record list otherwise.
+1. A live-status indicator under the device name: a green dot and "Live" while streaming, amber and "Connecting", grey and "Offline".
+2. An error banner, if present.
+3. A loading spinner while fetching.
+4. A no-data message when there are no records.
+5. A record list otherwise.
 
 For each record:
 
@@ -669,12 +720,15 @@ Parents pass data down and callbacks down. Children notify parents by calling th
 
 The frontend contract is documented in [`docs/openapi.yaml`](../../docs/openapi.yaml). It confirms:
 
+- sign-in, registration and current-user shapes
 - project, device, and telemetry response shapes
 - `{ success, message, data, timestamp }` response envelopes
 - validation error arrays
 - device registration requirements
 - nullable sensor units
 - UUID path/query parameters
+
+The live WebSocket cannot be described in OpenAPI and is documented in the [live telemetry contract](../contracts/live-telemetry.md) instead.
 
 The frontend intentionally implements only a subset of the available backend contract. For example, the backend exposes project and device detail endpoints, but the frontend currently uses list operations rather than separate detail requests.
 
@@ -684,7 +738,9 @@ The frontend intentionally implements only a subset of the available backend con
 index.html
   -> main.tsx
   -> App
-  -> GET /api/v1/projects
+  -> AuthScreen (no stored token)
+  -> POST /api/v1/auth/login
+  -> GET /api/v1/auth/me and GET /api/v1/projects
   -> ProjectsIndex
   -> click project
   -> ProjectWorkspace
@@ -696,16 +752,19 @@ index.html
   -> click device
   -> GET /api/v1/telemetry?deviceId={id}
   -> TelemetryPanel
+  -> WebSocket /api/v1/devices/{id}/telemetry/live
+  -> new readings merged into the panel
 ```
 
 ## 15. Current limitations and likely next work
 
 - No URL routing or browser back-button navigation.
-- No authentication or authorization.
-- No project creation UI.
+- The access token lives in `localStorage` and there are no refresh tokens, so a user signs in again when it expires (15 minutes by default).
+- Project creation is available to platform administrators only; there is no UI to rename or delete projects.
 - No member management.
 - No project settings.
-- No frontend test suite is currently described in the project guide.
+- Frontend unit tests (Vitest and Testing Library) exist in `frontend/tests/unit/`, covering `AuthScreen` and the live-telemetry helpers. Most other components are not tested yet.
+- The live feed is best-effort: a slow or dropped connection can miss readings, and the panel does not backfill them until it is reopened.
 - Telemetry is displayed as raw key/value data rather than charts or summaries.
 - Five-second polling continues only while the Devices tab is open.
 - The frontend assumes the backend response envelope and field names exactly match the TypeScript types.
@@ -716,12 +775,15 @@ index.html
 2. [`src/main.tsx`](../src/main.tsx)
 3. [`src/App.tsx`](../src/App.tsx)
 4. [`src/api/client.ts`](../src/api/client.ts)
-5. [`src/types/api.ts`](../src/types/api.ts)
-6. [`src/views/ProjectsIndex.tsx`](../src/views/ProjectsIndex.tsx)
-7. [`src/views/ProjectWorkspace.tsx`](../src/views/ProjectWorkspace.tsx)
-8. [`src/features/devices/DevicesView.tsx`](../src/features/devices/DevicesView.tsx)
-9. [`src/features/devices/DeviceRegistrationForm.tsx`](../src/features/devices/DeviceRegistrationForm.tsx)
-10. [`src/TelemetryPanel.tsx`](../src/TelemetryPanel.tsx)
-11. [`src/index.css`](../src/index.css)
-12. [`vite.config.ts`](../vite.config.ts)
-13. [`../../docs/openapi.yaml`](../../docs/openapi.yaml)
+5. [`src/api/live.ts`](../src/api/live.ts)
+6. [`src/types/api.ts`](../src/types/api.ts)
+7. [`src/views/AuthScreen.tsx`](../src/views/AuthScreen.tsx)
+8. [`src/views/ProjectsIndex.tsx`](../src/views/ProjectsIndex.tsx)
+9. [`src/views/ProjectWorkspace.tsx`](../src/views/ProjectWorkspace.tsx)
+10. [`src/features/devices/DevicesView.tsx`](../src/features/devices/DevicesView.tsx)
+11. [`src/features/devices/DeviceRegistrationForm.tsx`](../src/features/devices/DeviceRegistrationForm.tsx)
+12. [`src/TelemetryPanel.tsx`](../src/TelemetryPanel.tsx)
+13. [`src/index.css`](../src/index.css)
+14. [`vite.config.ts`](../vite.config.ts)
+15. [`../../docs/openapi.yaml`](../../docs/openapi.yaml)
+16. [`../../docs/contracts/live-telemetry.md`](../../docs/contracts/live-telemetry.md)

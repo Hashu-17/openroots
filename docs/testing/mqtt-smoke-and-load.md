@@ -42,6 +42,12 @@ schema change or a migration. The same setup works in PowerShell and bash.
    read inside the Mosquitto container. Change `--name-prefix` to create a
    separate fleet.
 
+   These broker logins are created directly with the broker's admin tool, not
+   through the credentials API. In normal use, issuing a device credential
+   through the API sets that device's broker password itself (see
+   [authentication](../security/authentication.md)); if you later issue a
+   credential for a test device, it replaces the shared test password.
+
    The script provisions the test fleet in the local development database
    selected by the running backend. Use a separate disposable test database
    when you need to keep ordinary development data isolated. Flyway applies
