@@ -10,10 +10,13 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.openroots.admin.AdminUserController;
+import com.openroots.admin.AdminUserService;
 import com.openroots.auth.dto.AuthResponse;
 import com.openroots.common.exception.NotFoundException;
 import com.openroots.config.SecurityConfig;
@@ -30,6 +33,8 @@ import com.openroots.project.service.ProjectMemberService;
 import com.openroots.project.service.ProjectService;
 import com.openroots.telemetry.controller.TelemetryController;
 import com.openroots.telemetry.service.TelemetryService;
+import com.openroots.user.model.PlatformRole;
+import com.openroots.user.model.UserEntity;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -56,6 +61,7 @@ import org.springframework.test.web.servlet.MockMvc;
  */
 @WebMvcTest(controllers = {
         AuthController.class,
+        AdminUserController.class,
         ProjectController.class,
         ProjectMemberController.class,
         DeviceController.class,
@@ -94,8 +100,67 @@ class SecurityWebTest {
     @MockBean
     private TelemetryService telemetryService;
 
+    @MockBean
+    private AdminUserService adminUserService;
+
     private String bearer() {
         return "Bearer " + tokenProvider.createToken(EMAIL);
+    }
+
+    // --- current user and platform admin --------------------------------------------------------
+
+    @Test
+    void currentUserRequiresTokenAndReturnsPlatformRole() throws Exception {
+        UserEntity user = new UserEntity(EMAIL, "hash", PlatformRole.ADMIN);
+        ReflectionTestUtils.setField(user, "id", UUID.randomUUID());
+        when(authService.currentUser(EMAIL)).thenReturn(user);
+
+        mockMvc.perform(get("/api/v1/auth/me")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.email").value(EMAIL))
+                .andExpect(jsonPath("$.data.platformRole").value("ADMIN"))
+                .andExpect(content().string(not(containsString("hash"))));
+    }
+
+    @Test
+    void adminEndpointsRequireTokenAndAdminRole() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(adminUserService.listUsers(EMAIL)).thenThrow(new AccessDeniedException("denied"));
+        when(adminUserService.changePlatformRole(eq(EMAIL), eq(userId), any()))
+                .thenThrow(new AccessDeniedException("denied"));
+
+        mockMvc.perform(get("/api/v1/admin/users")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/admin/users").header("Authorization", bearer()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/admin/users/{id}/platform-role", userId).header("Authorization", bearer())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"platformRole\":\"ADMIN\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminListsUsersWithoutPasswordHashes() throws Exception {
+        UserEntity user = new UserEntity("member@example.com", "secret-hash-value");
+        ReflectionTestUtils.setField(user, "id", UUID.randomUUID());
+        ReflectionTestUtils.setField(user, "createdAt", Instant.now());
+        when(adminUserService.listUsers(EMAIL)).thenReturn(List.of(user));
+
+        mockMvc.perform(get("/api/v1/admin/users").header("Authorization", bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].email").value("member@example.com"))
+                .andExpect(jsonPath("$.data[0].platformRole").value("USER"))
+                .andExpect(content().string(not(containsString("secret-hash-value"))));
+    }
+
+    @Test
+    void nonAdminProjectCreationIs403() throws Exception {
+        when(projectService.create(EMAIL, "New"))
+                .thenThrow(new AccessDeniedException("Only platform administrators may perform this operation"));
+
+        mockMvc.perform(post("/api/v1/projects").header("Authorization", bearer())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"New\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false));
     }
 
     // --- 401: missing / invalid credentials -------------------------------------------------
