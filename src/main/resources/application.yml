@@ -26,6 +26,11 @@ server:
   port: 8080
 
 openroots:
+  jwt:
+    # Base64-encoded HMAC key, at least 32 bytes. No default here on purpose: the app
+    # refuses to start outside the dev profile without OPENROOTS_JWT_SECRET.
+    secret: ${OPENROOTS_JWT_SECRET}
+    expiration: ${OPENROOTS_JWT_EXPIRATION:PT15M}
   mqtt:
     url: ${OPENROOTS_MQTT_URL:tcp://localhost:1883}
     username: ${OPENROOTS_MQTT_USERNAME:}

@@ -11,8 +11,11 @@ import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+/** Issues and verifies short-lived HMAC-signed JWT access tokens for human users. */
 @Component
 public class TokenProvider {
+
+    private static final int MIN_SECRET_BYTES = 32;
 
     private final SecretKey signingKey;
     private final Duration expiration;
@@ -20,7 +23,12 @@ public class TokenProvider {
     public TokenProvider(
             @Value("${openroots.jwt.secret}") String secret,
             @Value("${openroots.jwt.expiration:PT15M}") Duration expiration) {
-        this.signingKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
+        byte[] keyBytes = Decoders.BASE64.decode(secret);
+        if (keyBytes.length < MIN_SECRET_BYTES) {
+            throw new IllegalStateException(
+                    "openroots.jwt.secret must be a base64 string of at least " + MIN_SECRET_BYTES + " bytes");
+        }
+        this.signingKey = Keys.hmacShaKeyFor(keyBytes);
         this.expiration = expiration;
     }
 
@@ -34,6 +42,7 @@ public class TokenProvider {
                 .compact();
     }
 
+    /** Verifies signature and expiry; throws {@link io.jsonwebtoken.JwtException} when invalid. */
     public Claims parse(String token) {
         return Jwts.parser().verifyWith(signingKey).build().parseSignedClaims(token).getPayload();
     }

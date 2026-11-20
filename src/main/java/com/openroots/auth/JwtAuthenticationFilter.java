@@ -7,14 +7,23 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.List;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-@Component
+/**
+ * Authenticates a request from an {@code Authorization: Bearer <jwt>} header.
+ * An absent, malformed, tampered or expired token leaves the request anonymous;
+ * the security configuration then answers protected routes with 401.
+ *
+ * <p>Deliberately not a Spring bean: it is added to the security filter chain by
+ * {@link com.openroots.config.SecurityConfig} so it is not also registered as a servlet filter.
+ */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final String BEARER_PREFIX = "Bearer ";
 
     private final TokenProvider tokenProvider;
 
@@ -28,13 +37,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
-        if (header != null && header.startsWith("Bearer ")) {
+        if (header != null && header.startsWith(BEARER_PREFIX)) {
             try {
-                Claims claims = tokenProvider.parse(header.substring(7));
-                var authentication = new UsernamePasswordAuthenticationToken(
-                        claims.getSubject(), null, java.util.List.of());
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                Claims claims = tokenProvider.parse(header.substring(BEARER_PREFIX.length()).trim());
+                String email = claims.getSubject();
+                if (email != null && !email.isBlank()) {
+                    var authentication = new UsernamePasswordAuthenticationToken(email, null, List.of());
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             } catch (JwtException | IllegalArgumentException ignored) {
                 SecurityContextHolder.clearContext();
             }
