@@ -31,6 +31,12 @@ openroots:
     # refuses to start outside the dev profile without OPENROOTS_JWT_SECRET.
     secret: ${OPENROOTS_JWT_SECRET}
     expiration: ${OPENROOTS_JWT_EXPIRATION:PT15M}
+  bootstrap:
+    admin:
+      # Creates the first platform administrator at startup when none exists.
+      # Leave empty to skip. Remove the password from the environment after first login.
+      email: ${OPENROOTS_BOOTSTRAP_ADMIN_EMAIL:}
+      password: ${OPENROOTS_BOOTSTRAP_ADMIN_PASSWORD:}
   mqtt:
     url: ${OPENROOTS_MQTT_URL:tcp://localhost:1883}
     username: ${OPENROOTS_MQTT_USERNAME:}
