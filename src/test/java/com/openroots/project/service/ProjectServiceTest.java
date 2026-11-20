@@ -12,10 +12,10 @@ import com.openroots.project.model.ProjectMemberEntity;
 import com.openroots.project.model.ProjectRole;
 import com.openroots.project.repository.ProjectMemberRepository;
 import com.openroots.project.repository.ProjectRepository;
+import com.openroots.user.model.PlatformRole;
 import com.openroots.user.model.UserEntity;
-import com.openroots.user.repository.UserRepository;
+import com.openroots.user.service.PlatformAuthorizationService;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectServiceTest {
@@ -34,18 +35,28 @@ class ProjectServiceTest {
     private ProjectMemberRepository memberRepository;
 
     @Mock
-    private UserRepository userRepository;
+    private ProjectAuthorizationService authorizationService;
 
     @Mock
-    private ProjectAuthorizationService authorizationService;
+    private PlatformAuthorizationService platformAuthorizationService;
 
     @InjectMocks
     private ProjectService projectService;
 
     @Test
-    void creatorBecomesOwnerOfNewProject() {
-        UserEntity user = new UserEntity("owner@example.com", "hash");
-        when(userRepository.findByEmail("owner@example.com")).thenReturn(Optional.of(user));
+    void nonAdminCannotCreateProjects() {
+        when(platformAuthorizationService.requireAdmin("user@example.com"))
+                .thenThrow(new AccessDeniedException("Only platform administrators may perform this operation"));
+
+        assertThatThrownBy(() -> projectService.create("user@example.com", "Greenhouse"))
+                .isInstanceOf(AccessDeniedException.class);
+        org.mockito.Mockito.verifyNoInteractions(projectRepository, memberRepository);
+    }
+
+    @Test
+    void adminCreatorBecomesOwnerOfNewProject() {
+        UserEntity user = new UserEntity("owner@example.com", "hash", PlatformRole.ADMIN);
+        when(platformAuthorizationService.requireAdmin("owner@example.com")).thenReturn(user);
         when(projectRepository.save(any(ProjectEntity.class))).thenAnswer(call -> call.getArgument(0));
 
         ProjectEntity project = projectService.create("owner@example.com", "  Greenhouse ");
