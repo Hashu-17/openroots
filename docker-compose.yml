@@ -7,7 +7,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Bound to localhost only: the backend reaches the database over the Compose network.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -42,11 +43,14 @@ services:
       dockerfile: Dockerfile
     container_name: iot-backend
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      # Safe by default: the dev profile (seeded demo account) must be opted into via .env.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SPRING_DATASOURCE_URL: jdbc:postgresql://database:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       OPENROOTS_JWT_SECRET: ${OPENROOTS_JWT_SECRET:?Set OPENROOTS_JWT_SECRET in .env (base64, 32+ bytes)}
+      OPENROOTS_BOOTSTRAP_ADMIN_EMAIL: ${OPENROOTS_BOOTSTRAP_ADMIN_EMAIL:-}
+      OPENROOTS_BOOTSTRAP_ADMIN_PASSWORD: ${OPENROOTS_BOOTSTRAP_ADMIN_PASSWORD:-}
       OPENROOTS_MQTT_URL: tcp://mosquitto:1883
       OPENROOTS_MQTT_USERNAME: ${MQTT_INGESTOR_USERNAME:-telemetry-ingestor-spring}
       OPENROOTS_MQTT_PASSWORD: ${MQTT_INGESTOR_PASSWORD:?Set MQTT_INGESTOR_PASSWORD in .env}
