@@ -3,11 +3,15 @@ package com.openroots.project.service;
 import com.openroots.common.exception.NotFoundException;
 import com.openroots.project.model.ProjectMemberEntity;
 import com.openroots.project.repository.ProjectMemberRepository;
-import java.util.Locale;
 import java.util.UUID;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
+/**
+ * Project-level authorization. Non-members always get {@link NotFoundException}
+ * (BR-010) so callers cannot infer whether a project or its resources exist;
+ * members whose role is too weak get {@link AccessDeniedException} (403).
+ */
 @Service
 public class ProjectAuthorizationService {
 
@@ -22,27 +26,30 @@ public class ProjectAuthorizationService {
                 .orElseThrow(() -> new NotFoundException("Project not found: " + projectId));
     }
 
-    public void requireRead(String email, UUID projectId) {
-        requireMember(email, projectId);
+    /** Any member may read project resources. */
+    public ProjectMemberEntity requireRead(String email, UUID projectId) {
+        return requireMember(email, projectId);
     }
 
-    public void requireDeviceUse(String email, UUID projectId) {
-        String role = role(email, projectId);
-        if (!role.equals("VIEWER")) {
-            return;
+    /** VIEWER may not use devices (for example ingest telemetry). */
+    public ProjectMemberEntity requireDeviceUse(String email, UUID projectId) {
+        ProjectMemberEntity member = requireMember(email, projectId);
+        if (!member.getRole().canUseDevices()) {
+            throw denied();
         }
-        throw new AccessDeniedException("Project membership does not permit this operation");
+        return member;
     }
 
-    public void requireManage(String email, UUID projectId) {
-        String role = role(email, projectId);
-        if (role.equals("OWNER") || role.equals("ADMIN")) {
-            return;
+    /** OWNER or ADMIN: modify devices, credentials and membership. */
+    public ProjectMemberEntity requireManage(String email, UUID projectId) {
+        ProjectMemberEntity member = requireMember(email, projectId);
+        if (!member.getRole().canManage()) {
+            throw denied();
         }
-        throw new AccessDeniedException("Project membership does not permit this operation");
+        return member;
     }
 
-    private String role(String email, UUID projectId) {
-        return requireMember(email, projectId).getRole().toUpperCase(Locale.ROOT);
+    private AccessDeniedException denied() {
+        return new AccessDeniedException("Project membership does not permit this operation");
     }
 }
