@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/openroots/ingestion/internal/auth"
 	"github.com/openroots/ingestion/internal/config"
 	"github.com/openroots/ingestion/internal/consumer"
 	"github.com/openroots/ingestion/internal/historyapi"
@@ -27,6 +28,11 @@ func main() {
 
 func run(logger *log.Logger) error {
 	settings, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	verifier, err := auth.NewVerifier(settings.JWTSecret)
 	if err != nil {
 		return err
 	}
@@ -75,7 +81,8 @@ func run(logger *log.Logger) error {
 	}
 	logger.Printf("Go telemetry ingestion is running with %d workers and queue capacity %d", settings.WorkerCount, settings.QueueCapacity)
 
-	apiServer := historyapi.New(settings.HTTPAddr, deviceRegistry, database, liveHub, settings.AllowedOrigins, logger)
+	authorizer := &auth.Authorizer{Verifier: verifier, Members: database, Devices: deviceRegistry}
+	apiServer := historyapi.New(settings.HTTPAddr, authorizer, database, liveHub, settings.AllowedOrigins, logger)
 	apiErrors := make(chan error, 1)
 	go func() {
 		logger.Printf("telemetry API listening on %s", settings.HTTPAddr)

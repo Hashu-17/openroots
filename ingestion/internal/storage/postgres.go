@@ -52,6 +52,23 @@ func New(ctx context.Context, host, port, database, user, password string, maxCo
 	return &Store{pool: pool}, nil
 }
 
+// IsProjectMember applies Spring's read rule: any member of the project may read its telemetry.
+func (s *Store) IsProjectMember(ctx context.Context, email, projectID string) (bool, error) {
+	var member bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM project_member pm
+			JOIN "user" u ON u.id = pm.user_id
+			WHERE pm.project_id = $1::uuid AND u.email = $2
+		)
+	`, projectID, email).Scan(&member)
+	if err != nil {
+		return false, fmt.Errorf("check project membership: %w", err)
+	}
+	return member, nil
+}
+
 func (s *Store) Close() {
 	s.pool.Close()
 }
