@@ -12,3 +12,4 @@
 /.venv-mqtt-load/
 /examples/load-devices.txt
 /load-test-results/
+__pycache__/
