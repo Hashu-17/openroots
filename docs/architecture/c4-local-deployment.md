@@ -16,10 +16,11 @@ flowchart LR
         end
     end
     browser -->|"Host port 5173"| frontend
-    frontend -->|"/api proxy · backend:8080"| backend
+    frontend -->|"/api proxy and live WebSocket · backend:8080"| backend
     mqttClient -->|"Host loopback · 127.0.0.1:1883"| broker
     broker -->|"MQTT subscription"| backend
     backend -->|"JDBC"| database
+    backend -->|"Device logins · dynamic security"| broker
 
     classDef client fill:#08427b,color:#fff,stroke:#052e56,stroke-width:2px;
     classDef external fill:#999999,color:#fff,stroke:#666,stroke-width:2px;

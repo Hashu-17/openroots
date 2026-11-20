@@ -1,6 +1,6 @@
 # level 2: containers
 
-The platform runs as four application containers in Docker Compose. The browser loads the React UI from Nginx; Nginx serves the static app and proxies `/api/` requests to Spring Boot. Devices publish MQTT messages to Mosquitto, which Spring Boot consumes. The backend persists application and telemetry data in TimescaleDB/PostgreSQL.
+The platform runs as four application containers in Docker Compose. The browser loads the React UI from Nginx; Nginx serves the static app and proxies `/api/` requests to Spring Boot. Devices publish MQTT messages to Mosquitto, which Spring Boot consumes. The backend persists application and telemetry data in TimescaleDB/PostgreSQL, keeps each device's MQTT login in step with its credentials, and pushes new readings to open browsers over an authenticated WebSocket.
 
 ```mermaid
 flowchart LR
@@ -16,10 +16,11 @@ flowchart LR
     end
 
     operator -->|"Uses · HTTP"| web
-    web -->|"/api/v1 · HTTP/JSON<br/>Nginx proxy"| backend
+    web -->|"/api/v1 · HTTP/JSON and live WebSocket<br/>Nginx proxy"| backend
     device -->|"Publishes telemetry<br/>MQTT"| broker
     broker -->|"Delivers subscribed messages<br/>MQTT"| backend
     backend -->|"Reads and writes · JDBC"| database
+    backend -->|"Manages device logins<br/>MQTT dynamic security"| broker
 
     classDef person fill:#08427b,color:#fff,stroke:#052e56,stroke-width:2px;
     classDef external fill:#999999,color:#fff,stroke:#666,stroke-width:2px;

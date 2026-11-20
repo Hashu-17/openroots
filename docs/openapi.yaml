@@ -2,7 +2,9 @@ openapi: 3.0.3
 info:
   title: OpenRoots API
   version: 0.1.0
-  description: REST API for the OpenRoots self-hosted IoT platform.
+  description: >-
+    REST API for the OpenRoots self-hosted IoT platform. The live telemetry WebSocket
+    cannot be described in OpenAPI; see docs/contracts/live-telemetry.md.
 servers:
   - url: http://localhost:8080
 tags:
@@ -335,8 +337,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VoidApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BrokerUnavailable'
   /api/v1/projects/{projectId}/devices/{deviceId}/credentials:
     get:
       tags: [Credentials]
@@ -386,6 +394,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BrokerUnavailable'
   /api/v1/projects/{projectId}/devices/{deviceId}/credentials/{credentialId}:
     delete:
       tags: [Credentials]
@@ -410,6 +420,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BrokerUnavailable'
   /api/v1/projects/{projectId}/devices/{deviceId}/credentials/{credentialId}/rotate:
     post:
       tags: [Credentials]
@@ -434,6 +446,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BrokerUnavailable'
   /api/v1/telemetry:
     get:
       tags: [Telemetry]
@@ -1044,6 +1058,12 @@ components:
             $ref: '#/components/schemas/ErrorApiResponse'
     Forbidden:
       description: Authenticated, but the caller's project role does not permit this operation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorApiResponse'
+    BrokerUnavailable:
+      description: The MQTT broker did not confirm the device login change. Nothing was saved; retry.
       content:
         application/json:
           schema:

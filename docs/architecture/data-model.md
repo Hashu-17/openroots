@@ -9,8 +9,9 @@ Level 3 diagram.
 The schema contains the foundation for projects, project membership, devices,
 sensors, telemetry, commands, alerts, notifications, gateways, and firmware.
 The database tables exist in the current migrations, but the REST API,
-frontend, authentication, command dispatch, and alert workflows do not expose
-all of these entities yet.
+frontend, command dispatch, and alert workflows do not expose all of these
+entities yet. Users, project membership, and device credentials are in use
+through sign-in, project authorization, and the credentials API.
 
 The current implemented frontend/backend workflow primarily uses:
 
@@ -29,6 +30,7 @@ erDiagram
     DEVICE_GROUP ||--o{ DEVICE : groups
     GATEWAY ||--o{ DEVICE : relays
     DEVICE ||--o{ SENSOR : exposes
+    DEVICE ||--o{ DEVICE_CREDENTIAL : "authenticates with"
     SENSOR ||--o{ TELEMETRY : emits
     DEVICE ||--o{ COMMAND : receives
     DEVICE ||--o{ ALERT : triggers
@@ -40,6 +42,7 @@ erDiagram
         uuid id PK
         string email
         string password_hash
+        string platform_role
         timestamp created_at
     }
     PROJECT {
@@ -78,6 +81,15 @@ erDiagram
         string name
         string status
         timestamp last_seen_at
+    }
+    DEVICE_CREDENTIAL {
+        uuid id PK
+        uuid device_id FK
+        string name
+        string secret_hash
+        timestamp created_at
+        timestamp revoked_at
+        timestamp expires_at
     }
     SENSOR {
         uuid id PK
@@ -120,13 +132,14 @@ erDiagram
 
 | Entity | Responsibility | Current status |
 |---|---|---|
-| `USER` | Human identity and password hash | Database table exists; authentication is not active |
+| `USER` | Human identity, password hash, and platform role (`USER` or `ADMIN`) | Used by sign-in, registration, and admin endpoints |
 | `PROJECT` | Operational workspace that owns devices | Used by the current REST API and frontend |
-| `PROJECT_MEMBER` | User/project relationship and role | Database table exists; authorization is not active |
+| `PROJECT_MEMBER` | User/project relationship and role (`VIEWER`, `MEMBER`, `ADMIN`, `OWNER`) | Used for project authorization on every project, device, and telemetry request |
 | `DEVICE_GROUP` | Optional grouping of devices inside a project | Database table exists; not exposed by the current UI |
 | `GATEWAY` | Gateway or relay associated with devices | Database table exists; not exposed by the current UI |
 | `FIRMWARE` | Firmware release metadata | Database table exists; update workflow is not implemented |
 | `DEVICE` | Registered physical device | Used by the current REST API and frontend |
+| `DEVICE_CREDENTIAL` | A device's credential: hashed secret, expiry, and revocation time | Used by the credentials API; the newest credential's secret is also set as the device's MQTT broker password |
 | `SENSOR` | Named measurement channel belonging to a device | Used by device registration and telemetry |
 | `TELEMETRY` | Time-series measurement for a sensor | Stored by MQTT ingestion and listed through the API |
 | `COMMAND` | Device command and delivery status | Database table exists; command dispatch is not implemented |
@@ -140,10 +153,11 @@ erDiagram
 - A device can expose many sensors.
 - A sensor belongs to one device.
 - A device's `channel_name` values are unique through the `(device_id, channel_name)` constraint.
+- A device can have many credentials. Only a hash of each secret is stored.
 - A sensor can produce many telemetry records.
 - Telemetry uses `(sensor_id, recorded_at)` as its primary key for time-series uniqueness.
 - Deleting a project cascades to its devices through the project foreign key.
-- Deleting a device cascades to its sensors, telemetry, commands, and alerts.
+- Deleting a device cascades to its sensors, credentials, telemetry, commands, and alerts.
 - Device-group, gateway, and firmware associations are nullable and use `ON DELETE SET NULL`.
 - Alerts can generate many notifications.
 - Notifications reference both the alert and the receiving user.
@@ -155,6 +169,8 @@ The schema is created by:
 - [`V1__init.sql`](../../src/main/resources/db/migration/V1__init.sql) — creates the relational tables, foreign keys, uniqueness constraints, and indexes.
 - [`V2__timescale_telemetry.sql`](../../src/main/resources/db/migration/V2__timescale_telemetry.sql) — enables TimescaleDB, converts `telemetry` into a hypertable, and adds query indexes.
 - [`V3__device_registration_fields.sql`](../../src/main/resources/db/migration/V3__device_registration_fields.sql) — adds `device_type` and `registered_at` fields required by device registration.
+- [`V4__device_credentials.sql`](../../src/main/resources/db/migration/V4__device_credentials.sql) — creates `device_credential` with hashed secrets, expiry, and revocation.
+- [`V5__user_platform_role.sql`](../../src/main/resources/db/migration/V5__user_platform_role.sql) — adds the platform role to `user`.
 
 The generated OpenAPI models describe the API-facing subset of this schema.
 They should not be treated as a complete representation of every database
@@ -168,4 +184,4 @@ device, sensor, and telemetry management.
 
 For current runtime boundaries, use the [C4 architecture views](README.md).
 For the API contract, use the [OpenAPI document](../openapi.yaml). For the
-frontend implementation, use the [frontend A-to-Z guide](../frontend/frontend-a-z-guide.md).
+frontend implementation, use the [frontend guide](../frontend/frontend-dev-guide.md).

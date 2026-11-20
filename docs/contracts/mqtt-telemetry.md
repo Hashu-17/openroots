@@ -1,6 +1,6 @@
 # Telemetry MQTT Contract
 
-> **Status:** Proposed contract for a future Go ingestion service. This branch already ingests MQTT telemetry through Spring, but its runtime behavior does not enforce every requirement below. See the current-state [C4 telemetry flow](../architecture/c4-telemetry-ingestion.md) and the implementation notes in this document before treating a rule as implemented.
+> **Status:** Contract for MQTT telemetry. The Go ingestion service on `go-mqtt-ingestion` enforces every rule below. On this branch Spring ingests the messages and enforces only part of the contract: it accepts an optional body `deviceId` that matches the topic, ignores unexpected fields, and uses the server's time when `capturedAt` is missing. The smoke and load tests send contract-conforming messages. See the current-state [C4 telemetry flow](../architecture/c4-telemetry-ingestion.md).
 
 ## MQTT topic
 
