@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import com.openroots.common.exception.NotFoundException;
 import com.openroots.device.service.DeviceService;
+import com.openroots.project.service.ProjectAuthorizationService;
 import com.openroots.telemetry.dto.TelemetryIngestRequest;
 import com.openroots.telemetry.model.TelemetryRecord;
 import com.openroots.telemetry.repository.TelemetryRepository;
@@ -22,11 +23,38 @@ public class TelemetryService {
     private final DeviceService deviceService;
     private final TelemetryRepository telemetryRepository;
 
-    public TelemetryService(DeviceService deviceService, TelemetryRepository telemetryRepository) {
+    private final ProjectAuthorizationService authorizationService;
+
+    public TelemetryService(
+            DeviceService deviceService,
+            TelemetryRepository telemetryRepository,
+            ProjectAuthorizationService authorizationService) {
         this.deviceService = deviceService;
         this.telemetryRepository = telemetryRepository;
+        this.authorizationService = authorizationService;
     }
 
+    /** Human-user ingest: the caller must be able to use devices in the device's project. */
+    @Transactional
+    public TelemetryRecord ingest(String email, TelemetryIngestRequest request) {
+        authorizationService.requireDeviceUse(email, deviceService.findProjectId(request.deviceId()));
+        return ingest(request);
+    }
+
+    /** All telemetry for projects the caller is a member of. */
+    public List<TelemetryRecord> findAll(String email) {
+        return toRecords(telemetryRepository.findAllForUser(email));
+    }
+
+    public List<TelemetryRecord> findByDevice(String email, UUID deviceId) {
+        authorizationService.requireRead(email, deviceService.findProjectId(deviceId));
+        return findByDevice(deviceId);
+    }
+
+    /**
+     * Unauthorized ingest for trusted internal callers only (the MQTT consumer).
+     * REST callers must use {@link #ingest(String, TelemetryIngestRequest)}.
+     */
     @Transactional
     public TelemetryRecord ingest(TelemetryIngestRequest request) {
         if (!deviceService.exists(request.deviceId())) {
@@ -53,11 +81,7 @@ public class TelemetryService {
         return record;
     }
 
-    public List<TelemetryRecord> findAll() {
-        return toRecords(telemetryRepository.findAll());
-    }
-
-    public List<TelemetryRecord> findByDevice(UUID deviceId) {
+    List<TelemetryRecord> findByDevice(UUID deviceId) {
         if (!deviceService.exists(deviceId)) {
             throw new NotFoundException("Device not found: " + deviceId);
         }

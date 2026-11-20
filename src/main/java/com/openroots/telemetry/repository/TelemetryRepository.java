@@ -28,13 +28,17 @@ public class TelemetryRepository {
         return rows > 0;
     }
 
-    public List<TelemetryPoint> findAll() {
+    public List<TelemetryPoint> findAllForUser(String email) {
         return query("""
                 SELECT s.device_id, t.recorded_at, s.channel_name, t.value
                 FROM telemetry t
                 JOIN sensor s ON s.id = t.sensor_id
+                JOIN device d ON d.id = s.device_id
+                JOIN project_member pm ON pm.project_id = d.project_id
+                JOIN "user" u ON u.id = pm.user_id
+                WHERE u.email = ?
                 ORDER BY t.recorded_at DESC
-                """);
+                """, email);
     }
 
     public List<TelemetryPoint> findByDevice(UUID deviceId) {
