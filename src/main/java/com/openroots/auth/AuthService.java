@@ -7,6 +7,7 @@ import com.openroots.user.model.UserEntity;
 import com.openroots.user.repository.UserRepository;
 import java.util.Locale;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -57,6 +58,16 @@ public class AuthService {
         }
         return new AuthResponse(tokenProvider.createToken(user.getEmail()), "Bearer",
                 tokenProvider.getExpirationSeconds());
+    }
+
+    /**
+     * The account behind a valid token. A token can outlive its account (for example after
+     * the user is deleted), so a missing user is treated as unauthenticated.
+     */
+    @Transactional(readOnly = true)
+    public UserEntity currentUser(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new AuthenticationCredentialsNotFoundException("Account no longer exists"));
     }
 
     private String normalizeEmail(String email) {
