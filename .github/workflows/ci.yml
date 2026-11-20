@@ -1,7 +1,3 @@
-# Pull-request gate: build and test everything on GitHub-hosted runners.
-# Every job here should be a required status check in branch protection.
-# Black-box MQTT smoke/load tests are not here: they need a running stack and
-# live in mqtt-smoke.yml / mqtt-load-test.yml (manual, self-hosted).
 name: CI
 
 on:

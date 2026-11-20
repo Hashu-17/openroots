@@ -173,12 +173,10 @@ export default function App() {
     <header className="border-b border-[#2a3335] bg-[#141a1c]">
       <div className="mx-auto flex min-h-[78px] max-w-[1280px] items-center justify-between px-6 sm:px-10">
         <button className="group flex items-center gap-3 text-left" onClick={() => setView('projects')} type="button">
-          <span className="grid size-9 place-items-center bg-[#e6b85a] font-mono text-xs font-extrabold text-[#101416]">OR</span>
-          <span><span className="block font-mono text-[10px] font-bold uppercase tracking-[.14em] text-[#7f908e]">OpenRoots / Control</span><span className="font-display text-lg font-bold text-[#f1f3ed] transition group-hover:text-[#e6b85a]">Operations</span></span>
+          <span className="font-display text-lg font-bold text-[#f1f3ed] transition group-hover:text-[#e6b85a]">OpenRoots</span>
         </button>
         <div className="flex items-center gap-3 font-mono text-[10px] font-semibold uppercase tracking-[.1em] text-[#7f908e]">
           <span className="size-2 rounded-full bg-[#41c7a1] shadow-[0_0_0_4px_rgba(65,199,161,.12)]" />
-          {currentUser && <span className="hidden normal-case tracking-normal text-[#b5c1be] sm:inline">{currentUser.email}</span>}
           {currentUser?.platformRole === 'ADMIN' && <span className="bg-[#2c2617] px-1.5 py-0.5 text-[9px] text-[#e6b85a]">Admin</span>}
           <button className="border border-[#394345] px-2 py-1 text-[#b5c1be] transition hover:border-[#e6b85a] hover:text-[#e6b85a]" onClick={signOut} type="button">Sign out</button>
         </div>
