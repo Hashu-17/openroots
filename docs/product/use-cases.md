@@ -59,10 +59,10 @@
 
 **Flow:**
 
-1. The device sends its identifier and secret or API key.
-2. The server compares the supplied credential with its stored hash.
-3. The server checks that the credential is active.
-4. The server accepts or rejects the device request.
+1. The device connects to the MQTT broker with its device identifier as the username and its credential secret as the password.
+2. The broker checks the login. The server keeps that login in step with the device's credentials: issuing or rotating a credential sets the password, and revoking the newest credential, or its expiry, disables the login.
+3. The broker allows the device to publish only to its own telemetry topic.
+4. The broker accepts or rejects the connection.
 
 ## UC-006 Ingest telemetry
 
