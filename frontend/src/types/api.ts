@@ -1,5 +1,14 @@
 // These types describe the JSON data the backend sends to the frontend.
 
+// Returned by POST /api/v1/auth/login. The token goes in the Authorization header.
+export type AuthResponse = { accessToken: string; tokenType: string; expiresInSeconds: number }
+
+// Platform-wide role. Only ADMIN may create projects; project roles are separate.
+export type PlatformRole = 'USER' | 'ADMIN'
+
+// Returned by GET /api/v1/auth/me.
+export type CurrentUser = { id: string; email: string; platformRole: PlatformRole }
+
 export type Project = { id: string; name: string; createdAt: string }
 
 
