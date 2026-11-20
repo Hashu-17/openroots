@@ -11,10 +11,12 @@ src/
 ├── App.tsx                         Application state and top-level coordination
 ├── main.tsx                        Browser entry point; mounts the React application
 ├── api/
-│   └── client.ts                   HTTP helper and named REST endpoint functions
+│   ├── client.ts                   HTTP helper, access token handling, and named REST endpoint functions
+│   └── live.ts                     Live telemetry WebSocket client and reading merge
 ├── types/
-│   └── api.ts                      Shared TypeScript shapes for projects, devices, and telemetry
+│   └── api.ts                      Shared TypeScript shapes for sign-in, projects, devices, and telemetry
 ├── views/
+│   ├── AuthScreen.tsx              Sign-in and registration screen
 │   ├── ProjectsIndex.tsx           Project list screen
 │   └── ProjectWorkspace.tsx        Selected-project header, tabs, and screen composition
 ├── features/
@@ -32,7 +34,8 @@ The folder distinction is by responsibility: `views/` contains screen-level comp
 
 ## Data flow
 
-- `App` loads projects and coordinates selected project, device, and telemetry data through `api/client.ts`.
+- Without an access token, `App` shows `AuthScreen`. After sign-in it loads the current user and projects, and coordinates selected project, device, and telemetry data through `api/client.ts`. A rejected token returns the user to the sign-in screen.
+- While a device's telemetry panel is open, `api/live.ts` streams new readings over an authenticated WebSocket and `App` merges them into the list.
 - `ProjectWorkspace` renders project-level navigation and delegates the Devices tab to the device feature.
 - `DeviceRegistrationForm` owns its draft fields and validation; after registration it asks `App` to refresh the device list.
 - Device inventory refreshes every five seconds while the Devices tab is open.

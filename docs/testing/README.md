@@ -19,6 +19,13 @@ and where they run**, not by test type.
 Shared helpers for the MQTT tests (device provisioning, Python requirements,
 the local `.env`) are in `tests/support/mqtt/`.
 
+Not automated yet: the broker sync for device credentials is unit tested against
+a stubbed broker (`MosquittoDeviceProvisionerTest`, `DeviceCredentialServiceTest`,
+`BrokerCredentialExpiryTest`) and was verified by hand against a real Mosquitto
+2.1 broker with the production ACL defaults. The live WebSocket is covered by
+unit tests of its handler and hub and of the frontend helpers, but not end to
+end with a database and broker running together.
+
 Why the layout differs per stack: Java tests stay in `src/test/java` because
 Maven, Surefire/Failsafe and IDEs expect them there. Frontend tests stay inside
 `frontend/` because they import packages from `frontend/node_modules`. The
