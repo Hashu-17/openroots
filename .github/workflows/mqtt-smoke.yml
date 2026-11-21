@@ -44,7 +44,7 @@ jobs:
         env:
           MQTT_SMOKE_DEVICE_ID: ${{ secrets.MQTT_SMOKE_DEVICE_ID }}
           MQTT_SMOKE_DEVICE_PASSWORD: ${{ secrets.MQTT_SMOKE_DEVICE_PASSWORD }}
-          OPENROOTS_MQTT_HOST: 192.168.29.147
+          OPENROOTS_MQTT_HOST: 127.0.0.1
           OPENROOTS_MQTT_PORT: 1883
           OPENROOTS_API_URL: http://127.0.0.1:8080
           MQTT_SMOKE_CHANNEL: temperature
