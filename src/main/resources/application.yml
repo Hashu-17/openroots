@@ -45,6 +45,8 @@ openroots:
     admin-username: ${OPENROOTS_MQTT_ADMIN_USERNAME:}
     admin-password: ${OPENROOTS_MQTT_ADMIN_PASSWORD:}
     response-timeout-seconds: 5
+    # How often to disable broker logins whose credential has expired.
+    expiry-check-interval: ${OPENROOTS_MQTT_EXPIRY_CHECK_INTERVAL:PT1M}
   ingestion:
     # Shared key the Go ingestion service sends to read the device registry.
     # Empty disables the registry endpoint (every request gets 401).

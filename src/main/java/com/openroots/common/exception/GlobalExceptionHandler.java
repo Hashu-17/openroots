@@ -42,6 +42,13 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(exception.getMessage(), null));
     }
 
+    /** The broker did not confirm a device login change; nothing was saved. */
+    @ExceptionHandler(com.openroots.device.service.MqttProvisioningException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBrokerUnavailable() {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error("The MQTT broker did not confirm the change. Nothing was saved; try again.", null));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleBadRequest(IllegalArgumentException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
