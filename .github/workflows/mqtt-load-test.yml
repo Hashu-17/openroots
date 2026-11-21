@@ -5,6 +5,12 @@ name: MQTT load test
 on:
   workflow_dispatch:
     inputs:
+      implementation:
+        description: Ingestion service under test (labels results; go also samples openroots-ingestion)
+        required: true
+        default: spring
+        type: choice
+        options: [spring, go]
       project_id:
         description: Existing project UUID (leave blank to use the smoke-test device's project)
         required: false
@@ -31,9 +37,25 @@ on:
         default: 10
         type: number
       duration_seconds:
-        description: Test duration in seconds
+        description: Measured test duration in seconds (after warm-up)
         required: true
         default: 300
+        type: number
+      warmup_seconds:
+        description: Warm-up traffic before measurement starts (excluded from stats)
+        required: true
+        default: 30
+        type: number
+      schedule:
+        description: synchronized (all devices at once) or staggered (spread over the period)
+        required: true
+        default: synchronized
+        type: choice
+        options: [synchronized, staggered]
+      repeats:
+        description: Number of back-to-back runs (use 3 for a Spring vs Go comparison)
+        required: true
+        default: 3
         type: number
 
 permissions:
@@ -50,6 +72,9 @@ jobs:
       OPENROOTS_API_URL: http://127.0.0.1:8080
       OPENROOTS_PROJECT_ID: ${{ inputs.project_id }}
       OPENROOTS_MQTT_DEVICE_PASSWORD: ${{ secrets.MQTT_LOAD_DEVICE_PASSWORD }}
+      OPENROOTS_LOAD_DB_DSN: ${{ secrets.MQTT_LOAD_DB_DSN }}
+      OPENROOTS_API_EMAIL: ${{ secrets.MQTT_LOAD_API_EMAIL }}
+      OPENROOTS_API_PASSWORD: ${{ secrets.MQTT_LOAD_API_PASSWORD }}
       MQTT_SMOKE_DEVICE_ID: ${{ secrets.MQTT_SMOKE_DEVICE_ID }}
       OPENROOTS_MQTT_HOST: ${{ inputs.mqtt_host || '192.168.29.147' }}
       OPENROOTS_MQTT_PORT: ${{ inputs.mqtt_port || 1883 }}
@@ -77,11 +102,28 @@ jobs:
             exit /b 1
           )
 
-      - name: Check load-test password secret
+      - name: Confirm the stack matches the selected implementation
+        if: inputs.implementation == 'go'
         shell: cmd
         run: |
-          if not defined OPENROOTS_MQTT_DEVICE_PASSWORD (
-            echo Add the MQTT_LOAD_DEVICE_PASSWORD repository secret in GitHub Settings.
+          set "INGESTION_RUNNING="
+          for /f "delims=" %%S in ('docker inspect --format "{{.State.Running}}" openroots-ingestion 2^>nul') do set "INGESTION_RUNNING=%%S"
+          if /i not "%INGESTION_RUNNING%"=="true" (
+            echo implementation=go, but the openroots-ingestion container is not running.
+            echo Start the stack from the go-mqtt-ingestion branch first.
+            exit /b 1
+          )
+
+      - name: Check load-test secrets
+        shell: cmd
+        run: |
+          set "MISSING="
+          if not defined OPENROOTS_MQTT_DEVICE_PASSWORD set "MISSING=%MISSING% MQTT_LOAD_DEVICE_PASSWORD"
+          if not defined OPENROOTS_LOAD_DB_DSN set "MISSING=%MISSING% MQTT_LOAD_DB_DSN"
+          if not defined OPENROOTS_API_EMAIL set "MISSING=%MISSING% MQTT_LOAD_API_EMAIL"
+          if not defined OPENROOTS_API_PASSWORD set "MISSING=%MISSING% MQTT_LOAD_API_PASSWORD"
+          if defined MISSING (
+            echo Add these repository secrets in GitHub Settings:%MISSING%
             exit /b 1
           )
 
@@ -101,20 +143,39 @@ jobs:
           .venv-mqtt-load\Scripts\python.exe tests/support/mqtt/provision_mqtt_fleet.py
           --count "${{ inputs.device_count || 100 }}"
 
-      - name: Run synchronized MQTT load
-        shell: cmd
-        run: >-
-          .venv-mqtt-load\Scripts\python.exe tests/load/mqtt/mqtt_load_test.py
-          --devices tests/support/mqtt/load-devices.txt
-          --period "${{ inputs.period_seconds || 10 }}"
-          --duration "${{ inputs.duration_seconds || 300 }}"
-          --resource-sample-interval 5
-          --resource-output load-test-results/resource-samples.csv
+      - name: Run MQTT load and verify persistence
+        shell: powershell
+        env:
+          IMPLEMENTATION: ${{ inputs.implementation }}
+          REPEATS: ${{ inputs.repeats || 3 }}
+          PERIOD: ${{ inputs.period_seconds || 10 }}
+          DURATION: ${{ inputs.duration_seconds || 300 }}
+          WARMUP: ${{ inputs.warmup_seconds || 30 }}
+          SCHEDULE: ${{ inputs.schedule || 'synchronized' }}
+        run: |
+          $containers = 'iot-backend,iot-database,openroots-mosquitto'
+          if ($env:IMPLEMENTATION -eq 'go') { $containers += ',openroots-ingestion' }
+          $failed = 0
+          for ($i = 1; $i -le [int]$env:REPEATS; $i++) {
+            $runId = "${{ github.run_id }}-$i"
+            Write-Host "=== Run $i of $env:REPEATS ($env:IMPLEMENTATION, $runId) ==="
+            & .venv-mqtt-load\Scripts\python.exe tests/load/mqtt/mqtt_load_test.py `
+              --devices tests/support/mqtt/load-devices.txt `
+              --label $env:IMPLEMENTATION --run-id $runId `
+              --period $env:PERIOD --duration $env:DURATION --warmup $env:WARMUP `
+              --schedule $env:SCHEDULE --containers $containers `
+              --resource-sample-interval 5
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) {
+            Write-Host "$failed of $env:REPEATS runs failed their thresholds; see summary.md in each run folder."
+            exit 1
+          }
 
-      - name: Upload load-test resource samples
+      - name: Upload load-test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mqtt-load-test-results
+          name: mqtt-load-test-${{ inputs.implementation }}-${{ github.run_id }}
           path: load-test-results/
           if-no-files-found: warn
