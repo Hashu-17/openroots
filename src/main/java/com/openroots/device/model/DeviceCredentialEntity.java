@@ -69,6 +69,10 @@ public class DeviceCredentialEntity {
         revokedAt = Instant.now();
     }
 
+    public DeviceEntity getDevice() {
+        return device;
+    }
+
     public String getName() {
         return name;
     }

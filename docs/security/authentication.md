@@ -100,7 +100,11 @@ A credential belongs to one device. The secret is random, returned **only** in t
 **Broker login.** Each device has one Mosquitto login: the username is the device UUID and the password is the most recently issued credential secret. The login has the `device-publisher` role, so it can publish only to that device's topic. The backend applies changes through Mosquitto's dynamic-security API and fails the request if the broker does not confirm the change:
 
 - Creating or rotating a credential sets the broker password to the new secret.
-- Revoking a credential disables the broker login. Other credentials that are still active are not restored, so the device cannot connect again until a new credential is issued.
+- Revoking the device's newest credential (the one the broker holds) disables the broker login until a new credential is issued. Revoking an older credential changes nothing on the broker, because its secret was already replaced.
+- When the newest credential expires, a background job disables the broker login within a minute (`OPENROOTS_MQTT_EXPIRY_CHECK_INTERVAL`, default `PT1M`). After a restart it applies any expiries it missed.
+- If the broker does not confirm a change, the API answers `503` and nothing is saved.
+
+Only the newest credential works on the broker. Older credentials can still show as active in the credential list, but the device cannot connect with them.
 - Deleting a device deletes its broker login.
 
 Verified against Mosquitto 2.1 with the production ACL defaults: after each step, only the password that the backend last set is accepted; a revoked or deleted device is refused, and a publish to another device's topic is denied.
