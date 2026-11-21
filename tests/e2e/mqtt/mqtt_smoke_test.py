@@ -20,7 +20,7 @@ from urllib.parse import urlencode
 import paho.mqtt.client as mqtt
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "support" / "mqtt"))
-from openroots_api import ApiError, OpenRootsApi, user_credentials_from_env  # noqa: E402
+from openroots_api import OpenRootsApi, load_local_env  # noqa: E402
 
 CREDENTIAL_LIFETIME = timedelta(hours=1)
 
@@ -32,29 +32,9 @@ def required_env(name: str) -> str:
     return value
 
 
-def load_local_env() -> None:
-    """Load tests/support/mqtt/.env for local runs without overriding workflow variables."""
-    env_file = Path(__file__).resolve().parents[2] / "support" / "mqtt" / ".env"
-    if not env_file.is_file():
-        return
-    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        name, value = line.split("=", 1)
-        name = name.strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
-            value = value[1:-1]
-        if name:
-            os.environ.setdefault(name, value)
-
-
-def telemetry_visible(
-    api: OpenRootsApi, device_id: str, captured_at: datetime, channel: str, value: float
-) -> bool:
+def telemetry_visible(api: OpenRootsApi, device_id: str, captured_at: datetime, channel: str, value: float) -> bool:
     query = urlencode({"deviceId": device_id})
-    result = api.request(f"/api/v1/telemetry?{query}")
+    result = api.get(f"/api/v1/telemetry?{query}")
     for record in result.get("data", []):
         received_at = datetime.fromisoformat(record["capturedAt"].replace("Z", "+00:00"))
         actual = record.get("payload", {}).get(channel)
@@ -63,10 +43,8 @@ def telemetry_visible(
     return False
 
 
-def publish_reading(
-    broker_host: str, broker_port: int, device_id: str, password: str, channel: str, value: float,
-    captured_at_text: str,
-) -> None:
+def publish_reading(broker_host: str, broker_port: int, device_id: str, password: str,
+                    channel: str, value: float, captured_at_text: str) -> None:
     connected = threading.Event()
     connection_failure: list[str] = []
 
@@ -93,8 +71,7 @@ def publish_reading(
             raise ConnectionError(f"MQTT connection refused: {connection_failure[0]}")
 
         topic = f"openroots/v1/devices/{device_id}/telemetry"
-        # The topic identifies the device; ingestion rejects a deviceId field
-        # (docs/contracts/mqtt-telemetry.md).
+        # The topic identifies the device; the contract forbids a deviceId field in the body.
         message = json.dumps({
             "capturedAt": captured_at_text,
             "payload": {channel: value},
@@ -113,15 +90,14 @@ def publish_reading(
         client.loop_stop()
 
 
-def wait_for_telemetry(
-    api: OpenRootsApi, device_id: str, captured_at: datetime, channel: str, value: float, timeout_seconds: float
-) -> bool:
+def wait_for_telemetry(api: OpenRootsApi, device_id: str, captured_at: datetime, channel: str,
+                       value: float, timeout_seconds: float) -> bool:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         try:
             if telemetry_visible(api, device_id, captured_at, channel, value):
                 return True
-        except (ApiError, KeyError, ValueError, json.JSONDecodeError) as error:
+        except (RuntimeError, TimeoutError, KeyError, ValueError, json.JSONDecodeError) as error:
             print(f"Waiting for telemetry in API: {error}")
         time.sleep(1)
     return False
@@ -131,7 +107,6 @@ def main() -> int:
     load_local_env()
     try:
         device_id = str(uuid.UUID(required_env("MQTT_SMOKE_DEVICE_ID")))
-        email, user_password = user_credentials_from_env()
     except ValueError as error:
         print(error, file=sys.stderr)
         return 2
@@ -146,14 +121,13 @@ def main() -> int:
     captured_at = now.replace(microsecond=(now.microsecond // 1000) * 1000)
     captured_at_text = captured_at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
-    api = OpenRootsApi(api_url, email, user_password)
+    api = OpenRootsApi(api_url)
     try:
-        api.login()
         project_id = os.getenv("OPENROOTS_PROJECT_ID") or api.project_for_device(device_id)
         credential_id, secret = api.issue_credential(
             project_id, device_id, f"smoke-{captured_at_text}", CREDENTIAL_LIFETIME
         )
-    except ApiError as error:
+    except RuntimeError as error:
         print(f"MQTT smoke test setup failed: {error}", file=sys.stderr)
         return 1
     print(f"Issued a temporary credential for device {device_id} in project {project_id}")
@@ -178,7 +152,7 @@ def main() -> int:
         try:
             api.revoke_credential(project_id, device_id, credential_id)
             print("Revoked the temporary credential")
-        except ApiError as error:
+        except RuntimeError as error:
             # It still expires on its own after CREDENTIAL_LIFETIME.
             print(f"Could not revoke the temporary credential: {error}", file=sys.stderr)
 

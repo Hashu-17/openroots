@@ -45,8 +45,8 @@ jobs:
           MQTT_SMOKE_DEVICE_ID: ${{ secrets.MQTT_SMOKE_DEVICE_ID }}
           # The test issues itself a one-hour device credential and revokes it after,
           # so no device password is stored. The user must be project OWNER or ADMIN.
-          MQTT_SMOKE_USER_EMAIL: ${{ secrets.MQTT_SMOKE_USER_EMAIL }}
-          MQTT_SMOKE_USER_PASSWORD: ${{ secrets.MQTT_SMOKE_USER_PASSWORD }}
+          OPENROOTS_API_EMAIL: ${{ secrets.MQTT_SMOKE_USER_EMAIL }}
+          OPENROOTS_API_PASSWORD: ${{ secrets.MQTT_SMOKE_USER_PASSWORD }}
           OPENROOTS_MQTT_HOST: 127.0.0.1
           OPENROOTS_MQTT_PORT: 1883
           OPENROOTS_API_URL: http://127.0.0.1:8080

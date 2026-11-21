@@ -21,29 +21,15 @@ from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
 
-from openroots_api import ApiError, OpenRootsApi, user_credentials_from_env
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from openroots_api import OpenRootsApi, load_local_env  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_ENV_FILE = HERE / ".env"
 DEFAULT_DEVICE_FILE = HERE / "load-devices.txt"
 DEFAULT_MANIFEST = HERE / "load-credentials.json"
-# Margin past the planned run so setup and slow connects don't hit the expiry.
+# Margin past the planned run so setup, slow connects and the drain don't hit the expiry.
 EXPIRY_MARGIN = timedelta(minutes=30)
-
-
-def load_env_file(path: Path) -> None:
-    """Load a local env file without overriding variables the workflow already set."""
-    if not path.is_file():
-        return
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        os.environ.setdefault(key.strip(), value)
 
 
 def broker_diagnostics(device_id: str) -> None:
@@ -103,7 +89,7 @@ def revoke(api: OpenRootsApi, manifest_path: Path, device_file: Path) -> int:
         for entry in credentials:
             try:
                 api.revoke_credential(project_id, entry["deviceId"], entry["credentialId"])
-            except ApiError as error:
+            except RuntimeError as error:
                 failures += 1
                 print(f"Could not revoke credential for {entry['deviceId']}: {error}", file=sys.stderr)
         print(f"Revoked {len(credentials) - failures}/{len(credentials)} temporary credentials")
@@ -122,13 +108,13 @@ def main() -> int:
     parser.add_argument("--count", type=int, default=100, help="number of virtual devices to create/reuse")
     parser.add_argument("--api-url", help="OpenRoots backend URL (defaults to tests/support/mqtt/.env or localhost)")
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE,
-                        help="ignored local env file with the test user's email and password")
+                        help="ignored local env file with the test account's email and password")
     parser.add_argument("--output", type=Path, default=DEFAULT_DEVICE_FILE,
                         help="device file consumed by mqtt_load_test.py (holds secrets)")
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST,
                         help="credential ids used by --revoke")
     parser.add_argument("--run-seconds", type=float, default=1800,
-                        help="planned load-test duration; credentials expire 30 minutes after it")
+                        help="planned total load-test time; credentials expire 30 minutes after it")
     parser.add_argument("--revoke", action="store_true",
                         help="revoke the credentials in --manifest and delete --output, then exit")
     parser.add_argument("--name-prefix", default="openroots-load-test",
@@ -137,13 +123,9 @@ def main() -> int:
     parser.add_argument("--unit", default="C")
     args = parser.parse_args()
 
-    load_env_file(args.env_file)
-    try:
-        email, password = user_credentials_from_env()
-    except ValueError as error:
-        parser.error(str(error))
+    load_local_env(args.env_file)
     api_url = args.api_url or os.getenv("OPENROOTS_API_URL", "http://127.0.0.1:8080")
-    api = OpenRootsApi(api_url, email, password)
+    api = OpenRootsApi(api_url)
 
     if args.revoke:
         return revoke(api, args.manifest, args.output)
@@ -155,7 +137,6 @@ def main() -> int:
     if not args.name_prefix.strip() or not args.channel.strip():
         parser.error("--name-prefix and --channel must not be blank")
 
-    api.login()
     requested_project_id = (args.project_id or os.getenv("OPENROOTS_PROJECT_ID") or "").strip()
     if requested_project_id:
         try:
@@ -172,7 +153,7 @@ def main() -> int:
     print(f"Checking existing test devices in project {project_id}...")
     existing = {
         device["name"]: device
-        for device in api.request(devices_path).get("data", [])
+        for device in api.get(devices_path).get("data", [])
         if isinstance(device, dict) and isinstance(device.get("name"), str)
     }
 
@@ -181,7 +162,7 @@ def main() -> int:
         name = f"{args.name_prefix}-{index:03d}"
         device = existing.get(name)
         if device is None:
-            device = api.request(devices_path, "POST", {
+            device = api.post(devices_path, {
                 "name": name,
                 "type": "mqtt-load-test",
                 "sensors": [{"channelName": args.channel, "unit": args.unit}],
@@ -221,6 +202,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (ApiError, RuntimeError, OSError, subprocess.SubprocessError, ValueError, KeyError) as error:
+    except (RuntimeError, OSError, subprocess.SubprocessError, ValueError, KeyError) as error:
         print(f"Fleet setup failed: {error}", file=sys.stderr)
         raise SystemExit(1)

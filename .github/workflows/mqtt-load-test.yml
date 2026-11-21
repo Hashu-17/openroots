@@ -51,8 +51,8 @@ jobs:
       OPENROOTS_PROJECT_ID: ${{ inputs.project_id }}
       # Fleet setup signs in as this user (project OWNER or ADMIN) and issues each device
       # a temporary credential; the cleanup step revokes them. No device password is stored.
-      MQTT_SMOKE_USER_EMAIL: ${{ secrets.MQTT_SMOKE_USER_EMAIL }}
-      MQTT_SMOKE_USER_PASSWORD: ${{ secrets.MQTT_SMOKE_USER_PASSWORD }}
+      OPENROOTS_API_EMAIL: ${{ secrets.MQTT_SMOKE_USER_EMAIL }}
+      OPENROOTS_API_PASSWORD: ${{ secrets.MQTT_SMOKE_USER_PASSWORD }}
       MQTT_SMOKE_DEVICE_ID: ${{ secrets.MQTT_SMOKE_DEVICE_ID }}
       OPENROOTS_MQTT_HOST: ${{ inputs.mqtt_host || '127.0.0.1' }}
       OPENROOTS_MQTT_PORT: ${{ inputs.mqtt_port || 1883 }}
@@ -86,11 +86,11 @@ jobs:
       - name: Check test user secrets
         shell: cmd
         run: |
-          if not defined MQTT_SMOKE_USER_EMAIL (
+          if not defined OPENROOTS_API_EMAIL (
             echo Add the MQTT_SMOKE_USER_EMAIL and MQTT_SMOKE_USER_PASSWORD repository secrets in GitHub Settings.
             exit /b 1
           )
-          if not defined MQTT_SMOKE_USER_PASSWORD (
+          if not defined OPENROOTS_API_PASSWORD (
             echo Add the MQTT_SMOKE_USER_PASSWORD repository secret in GitHub Settings.
             exit /b 1
           )
