@@ -86,15 +86,23 @@ def parse_memory_bytes(value: str) -> int:
     return int(amount * (base ** powers[unit]))
 
 
-def read_device_ids(path: str) -> list[str]:
+def read_devices(path: str) -> dict[str, str | None]:
+    """Read ``uuid`` or ``uuid secret`` lines; a missing secret falls back to the shared password."""
+    devices: dict[str, str | None] = {}
     with open(path, encoding="utf-8") as device_file:
-        device_ids = [line.strip() for line in device_file
-                      if line.strip() and not line.lstrip().startswith("#")]
-    if not device_ids:
+        for line in device_file:
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) > 2:
+                raise ValueError("device file lines must be 'uuid' or 'uuid secret'")
+            device_id = str(uuid.UUID(parts[0]))
+            if device_id in devices:
+                raise ValueError("device file contains duplicate UUIDs")
+            devices[device_id] = parts[1] if len(parts) == 2 else None
+    if not devices:
         raise ValueError("device file contains no device UUIDs")
-    if len(set(device_ids)) != len(device_ids):
-        raise ValueError("device file contains duplicate UUIDs")
-    return [str(uuid.UUID(device_id)) for device_id in device_ids]
+    return devices
 
 
 def git_revision() -> dict[str, str | None]:
@@ -369,7 +377,7 @@ class TelemetryWatcher:
 
 # --------------------------------------------------------------------------- run
 
-def connect_fleet(device_ids: list[str], args: argparse.Namespace, password: str) -> list[Device]:
+def connect_fleet(device_ids: list[str], args: argparse.Namespace, passwords: dict[str, str]) -> list[Device]:
     devices: list[Device] = []
     try:
         for device_id in device_ids:
@@ -381,7 +389,7 @@ def connect_fleet(device_ids: list[str], args: argparse.Namespace, password: str
                 protocol=mqtt.MQTTv311,
                 clean_session=True,
             )
-            client.username_pw_set(device_id, password)
+            client.username_pw_set(device_id, passwords[device_id])
             client.max_inflight_messages_set(100)
             device = Device(device_id, client)
 
@@ -651,7 +659,8 @@ def render_markdown(summary: dict[str, Any]) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--devices", required=True, help="text file with one registered device UUID per line")
+    parser.add_argument("--devices", required=True,
+                        help="file with one 'uuid secret' (or bare 'uuid') line per registered device")
     parser.add_argument("--label", default=os.getenv("OPENROOTS_LOAD_LABEL", "unlabeled"),
                         help="implementation under test, e.g. spring or go; names the result folder")
     parser.add_argument("--run-id", default=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
@@ -711,12 +720,17 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     load_local_env()
     args = parse_args()
-    device_ids = read_device_ids(args.devices)
+    device_secrets = read_devices(args.devices)
+    device_ids = list(device_secrets)
     channels = args.channels or ["temperature"]
-    password = os.getenv("OPENROOTS_MQTT_DEVICE_PASSWORD")
-    if not password:
-        print("Set OPENROOTS_MQTT_DEVICE_PASSWORD to the password provisioned for each test device.", file=sys.stderr)
+    # provision_mqtt_fleet.py writes a temporary secret per device; a bare UUID line
+    # falls back to OPENROOTS_MQTT_DEVICE_PASSWORD.
+    shared_password = os.getenv("OPENROOTS_MQTT_DEVICE_PASSWORD")
+    if any(secret is None for secret in device_secrets.values()) and not shared_password:
+        print("The device file has devices without a secret: run provision_mqtt_fleet.py, "
+              "or set OPENROOTS_MQTT_DEVICE_PASSWORD.", file=sys.stderr)
         return 2
+    passwords = {device_id: secret or shared_password for device_id, secret in device_secrets.items()}
 
     run_dir = Path(args.output_dir) / f"{args.label}-{args.run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -724,7 +738,7 @@ def main() -> int:
 
     print(f"Connecting {len(device_ids)} devices to {args.host}:{args.port} (QoS {args.qos})...")
     try:
-        devices = connect_fleet(device_ids, args, password)
+        devices = connect_fleet(device_ids, args, passwords)
     except Exception as error:
         print(f"Connection failed: {error}", file=sys.stderr)
         return 2
