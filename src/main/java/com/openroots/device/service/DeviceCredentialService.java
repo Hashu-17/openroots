@@ -75,15 +75,23 @@ public class DeviceCredentialService {
     }
 
     /**
-     * Revokes the credential and disables the device's broker login. The broker holds only the
-     * most recently issued password, so the device cannot connect again until a new credential
-     * is issued. Other credentials that are still active are not restored on the broker.
+     * Revokes the credential. The broker holds only the most recently issued secret, so only
+     * revoking that credential disables the device's broker login; older credentials were
+     * already replaced on the broker when a newer one was issued.
      */
     @Transactional
     public void revoke(String email, UUID projectId, UUID deviceId, UUID credentialId) {
         deviceService.findByIdForManage(email, projectId, deviceId);
         activeCredential(deviceId, credentialId).revoke();
-        brokerProvisioner.disable(deviceId);
+        if (isBrokerCredential(deviceId, credentialId)) {
+            brokerProvisioner.disable(deviceId);
+        }
+    }
+
+    /** True when the credential is the device's newest, i.e. the one whose secret the broker holds. */
+    boolean isBrokerCredential(UUID deviceId, UUID credentialId) {
+        List<DeviceCredentialEntity> credentials = credentialRepository.findAllByDevice_IdOrderByCreatedAtDesc(deviceId);
+        return !credentials.isEmpty() && credentials.get(0).getId().equals(credentialId);
     }
 
     private DeviceCredentialEntity activeCredential(UUID deviceId, UUID credentialId) {

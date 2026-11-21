@@ -38,8 +38,40 @@ class DeviceServiceTest {
     @Mock
     private ProjectAuthorizationService authorizationService;
 
+    @Mock
+    private MosquittoDeviceProvisioner brokerProvisioner;
+
     @InjectMocks
     private DeviceService deviceService;
+
+    @Test
+    void deletingADeviceRemovesItsBrokerLoginFirst() {
+        UUID projectId = UUID.randomUUID();
+        DeviceEntity device = new DeviceEntity(new com.openroots.project.model.ProjectEntity("p"), "d", "t");
+        UUID deviceId = UUID.randomUUID();
+        when(projectRepository.existsById(projectId)).thenReturn(true);
+        when(deviceRepository.findByIdAndProject_Id(deviceId, projectId)).thenReturn(Optional.of(device));
+
+        deviceService.delete("owner@example.com", projectId, deviceId);
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(brokerProvisioner, deviceRepository);
+        order.verify(brokerProvisioner).delete(deviceId);
+        order.verify(deviceRepository).delete(device);
+    }
+
+    @Test
+    void aDeviceStaysWhenItsBrokerLoginCannotBeRemoved() {
+        UUID projectId = UUID.randomUUID();
+        DeviceEntity device = new DeviceEntity(new com.openroots.project.model.ProjectEntity("p"), "d", "t");
+        UUID deviceId = UUID.randomUUID();
+        when(projectRepository.existsById(projectId)).thenReturn(true);
+        when(deviceRepository.findByIdAndProject_Id(deviceId, projectId)).thenReturn(Optional.of(device));
+        org.mockito.Mockito.doThrow(new MqttProvisioningException("broker down")).when(brokerProvisioner).delete(deviceId);
+
+        assertThatThrownBy(() -> deviceService.delete("owner@example.com", projectId, deviceId))
+                .isInstanceOf(MqttProvisioningException.class);
+        verify(deviceRepository, never()).delete(any());
+    }
 
     @Test
     void nonMemberCannotRegisterListReadOrDeleteDevicesInAnotherProject() {
