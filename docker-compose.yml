@@ -54,6 +54,12 @@ services:
       OPENROOTS_MQTT_URL: tcp://mosquitto:1883
       OPENROOTS_MQTT_USERNAME: ${MQTT_INGESTOR_USERNAME:-telemetry-ingestor-spring}
       OPENROOTS_MQTT_PASSWORD: ${MQTT_INGESTOR_PASSWORD:?Set MQTT_INGESTOR_PASSWORD in .env}
+      # Creates, updates and disables each device's broker login when its credentials change.
+      OPENROOTS_MQTT_PROVISIONING_ENABLED: "true"
+      OPENROOTS_MQTT_BROKER_HOST: mosquitto
+      OPENROOTS_MQTT_BROKER_PORT: 1883
+      OPENROOTS_MQTT_ADMIN_USERNAME: ${MQTT_ADMIN_USERNAME:-openroots-admin}
+      OPENROOTS_MQTT_ADMIN_PASSWORD: ${MQTT_ADMIN_PASSWORD:?Set MQTT_ADMIN_PASSWORD in .env}
     depends_on:
       database:
         condition: service_healthy
