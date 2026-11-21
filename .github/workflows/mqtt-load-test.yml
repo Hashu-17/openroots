@@ -31,9 +31,25 @@ on:
         default: 10
         type: number
       duration_seconds:
-        description: Measured test duration in seconds
+        description: Measured test duration in seconds (after warm-up)
         required: true
         default: 300
+        type: number
+      warmup_seconds:
+        description: Warm-up traffic before measurement starts (excluded from stats)
+        required: true
+        default: 30
+        type: number
+      schedule:
+        description: synchronized (all devices at once) or staggered (spread over the period)
+        required: true
+        default: synchronized
+        type: choice
+        options: [synchronized, staggered]
+      repeats:
+        description: Number of back-to-back runs (use 3 to compare branches)
+        required: true
+        default: 3
         type: number
 
 permissions:
@@ -118,9 +134,9 @@ jobs:
         shell: powershell
         env:
           COUNT: ${{ inputs.device_count || 100 }}
-          REPEATS: 1
+          REPEATS: ${{ inputs.repeats || 3 }}
           DURATION: ${{ inputs.duration_seconds || 300 }}
-          WARMUP: 0
+          WARMUP: ${{ inputs.warmup_seconds || 30 }}
         run: |
           # Credentials must outlive every repeat: warm-up, measured time, and about
           # two minutes per run to connect, wait for PUBACKs and drain the database.
@@ -133,11 +149,11 @@ jobs:
         shell: powershell
         env:
           LABEL_SOURCE: ${{ github.ref_name }}
-          REPEATS: 1
+          REPEATS: ${{ inputs.repeats || 3 }}
           PERIOD: ${{ inputs.period_seconds || 10 }}
           DURATION: ${{ inputs.duration_seconds || 300 }}
-          WARMUP: 0
-          SCHEDULE: synchronized
+          WARMUP: ${{ inputs.warmup_seconds || 30 }}
+          SCHEDULE: ${{ inputs.schedule || 'synchronized' }}
         run: |
           # Results are labelled with the branch under test (branch names may contain '/').
           $label = $env:LABEL_SOURCE -replace '[^A-Za-z0-9._-]', '-'
