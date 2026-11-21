@@ -129,12 +129,23 @@ jobs:
 
       - name: Create Python environment and install MQTT client
         shell: cmd
+        env:
+          # Set repo variable SMOKE_PYTHON (Settings > Variables) to a python.exe
+          # the runner service account can read; otherwise python on PATH is used.
+          SMOKE_PYTHON: ${{ vars.SMOKE_PYTHON }}
         run: |
-          if not exist "%USERPROFILE%\anaconda3\python.exe" (
-            echo Python not found at %USERPROFILE%\anaconda3\python.exe
+          if "%SMOKE_PYTHON%"=="" (
+            for /f "delims=" %%i in ('where python 2^>nul') do if not defined SMOKE_PYTHON set "SMOKE_PYTHON=%%i"
+          )
+          if "%SMOKE_PYTHON%"=="" (
+            echo Python not found. Set the SMOKE_PYTHON repo variable or put python on the runner PATH.
             exit /b 1
           )
-          "%USERPROFILE%\anaconda3\python.exe" -m venv .venv-mqtt-load
+          if not exist "%SMOKE_PYTHON%" (
+            echo Python not found at %SMOKE_PYTHON%
+            exit /b 1
+          )
+          "%SMOKE_PYTHON%" -m venv .venv-mqtt-load
           .venv-mqtt-load\Scripts\python.exe -m pip install -r tests/support/mqtt/requirements-mqtt.txt
 
       - name: Create or reuse test devices and MQTT accounts
