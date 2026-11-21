@@ -4,15 +4,14 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
-from typing import Any
 from uuid import UUID
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from openroots_api import OpenRootsApi  # noqa: E402
 
 
 DEFAULT_ENV_FILE = Path(__file__).resolve().parent / ".env"
@@ -35,35 +34,17 @@ def read_env_file(path: Path) -> dict[str, str]:
     return values
 
 
-def api_json(base_url: str, path: str, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
-    data = json.dumps(body).encode("utf-8") if body is not None else None
-    request = urllib.request.Request(
-        f"{base_url.rstrip('/')}{path}",
-        data=data,
-        method=method,
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as error:
-        details = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"OpenRoots API returned HTTP {error.code}: {details}") from error
-    except urllib.error.URLError as error:
-        raise RuntimeError(f"Could not reach OpenRoots API: {error.reason}") from error
-
-
-def project_for_device(base_url: str, device_id: str) -> str:
+def project_for_device(api: OpenRootsApi, device_id: str) -> str:
     try:
         wanted_id = str(UUID(device_id))
     except ValueError as error:
         raise RuntimeError("MQTT_SMOKE_DEVICE_ID must be a valid UUID to find the test project") from error
-    projects = api_json(base_url, "/api/v1/projects").get("data", [])
+    projects = api.get("/api/v1/projects").get("data", [])
     for project in projects:
         project_id = project.get("id")
         if not project_id:
             continue
-        devices = api_json(base_url, f"/api/v1/projects/{project_id}/devices").get("data", [])
+        devices = api.get(f"/api/v1/projects/{project_id}/devices").get("data", [])
         if any(device.get("id") == wanted_id for device in devices):
             return str(UUID(project_id))
     raise RuntimeError(
@@ -197,6 +178,10 @@ def main() -> int:
     api_url = args.api_url or os.getenv("OPENROOTS_API_URL") or env_file_values.get(
         "OPENROOTS_API_URL", "http://127.0.0.1:8080"
     )
+    for name in ("OPENROOTS_API_TOKEN", "OPENROOTS_API_EMAIL", "OPENROOTS_API_PASSWORD"):
+        if not os.getenv(name) and env_file_values.get(name):
+            os.environ[name] = env_file_values[name]
+    api = OpenRootsApi(api_url)
     requested_project_id = (args.project_id or os.getenv("OPENROOTS_PROJECT_ID") or "").strip()
     if requested_project_id:
         try:
@@ -207,10 +192,10 @@ def main() -> int:
         reference_device_id = os.getenv("MQTT_SMOKE_DEVICE_ID")
         if not reference_device_id:
             parser.error("pass --project-id or set MQTT_SMOKE_DEVICE_ID so the project can be found")
-        project_id = project_for_device(api_url, reference_device_id)
+        project_id = project_for_device(api, reference_device_id)
     devices_path = f"/api/v1/projects/{project_id}/devices"
     print(f"Checking existing test devices in project {project_id}...")
-    devices_response = api_json(api_url, devices_path)
+    devices_response = api.get(devices_path)
     existing = {
         device["name"]: device
         for device in devices_response.get("data", [])
@@ -222,7 +207,7 @@ def main() -> int:
         name = f"{args.name_prefix}-{index:03d}"
         device = existing.get(name)
         if device is None:
-            created = api_json(api_url, devices_path, "POST", {
+            created = api.post(devices_path, {
                 "name": name,
                 "type": "mqtt-load-test",
                 "sensors": [{"channelName": args.channel, "unit": args.unit}],

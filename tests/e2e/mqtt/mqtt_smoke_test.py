@@ -11,11 +11,12 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.error import URLError
 from urllib.parse import urlencode
-from urllib.request import urlopen
 
 import paho.mqtt.client as mqtt
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "support" / "mqtt"))
+from openroots_api import OpenRootsApi, load_local_env  # noqa: E402
 
 
 def required_env(name: str) -> str:
@@ -25,28 +26,9 @@ def required_env(name: str) -> str:
     return value
 
 
-def load_local_env() -> None:
-    """Load tests/support/mqtt/.env for local runs without overriding workflow variables."""
-    env_file = Path(__file__).resolve().parents[2] / "support" / "mqtt" / ".env"
-    if not env_file.is_file():
-        return
-    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        name, value = line.split("=", 1)
-        name = name.strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
-            value = value[1:-1]
-        if name:
-            os.environ.setdefault(name, value)
-
-
-def telemetry_visible(api_url: str, device_id: str, captured_at: datetime, channel: str, value: float) -> bool:
+def telemetry_visible(api: OpenRootsApi, device_id: str, captured_at: datetime, channel: str, value: float) -> bool:
     query = urlencode({"deviceId": device_id})
-    with urlopen(f"{api_url.rstrip('/')}/api/v1/telemetry?{query}", timeout=5) as response:
-        result = json.load(response)
+    result = api.get(f"/api/v1/telemetry?{query}")
     for record in result.get("data", []):
         received_at = datetime.fromisoformat(record["capturedAt"].replace("Z", "+00:00"))
         actual = record.get("payload", {}).get(channel)
@@ -99,8 +81,8 @@ def main() -> int:
             raise ConnectionError(f"MQTT connection refused: {connection_failure[0]}")
 
         topic = f"openroots/v1/devices/{device_id}/telemetry"
+        # The topic identifies the device; the contract forbids a deviceId field in the body.
         message = json.dumps({
-            "deviceId": device_id,
             "capturedAt": captured_at_text,
             "payload": {channel: value},
         })
@@ -120,13 +102,14 @@ def main() -> int:
             client.disconnect()
         client.loop_stop()
 
+    api = OpenRootsApi(api_url)
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         try:
-            if telemetry_visible(api_url, device_id, captured_at, channel, value):
+            if telemetry_visible(api, device_id, captured_at, channel, value):
                 print(f"Backend persisted telemetry for device {device_id} ({channel}={value})")
                 return 0
-        except (URLError, TimeoutError, KeyError, ValueError, json.JSONDecodeError) as error:
+        except (RuntimeError, TimeoutError, KeyError, ValueError, json.JSONDecodeError) as error:
             print(f"Waiting for telemetry in API: {error}")
         time.sleep(1)
 
