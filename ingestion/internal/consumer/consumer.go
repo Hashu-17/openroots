@@ -188,7 +188,7 @@ func (c *Consumer) writeWithRetry(ctx context.Context, deviceID string, readings
 	backoffs := []time.Duration{250 * time.Millisecond, 750 * time.Millisecond, 1500 * time.Millisecond}
 	var lastErr error
 	for attempt := 0; attempt <= len(backoffs); attempt++ {
-	if err := c.store.InsertReadings(ctx, deviceID, readings); err == nil {
+		if err := c.store.InsertReadings(ctx, deviceID, readings); err == nil {
 			return nil
 		} else {
 			lastErr = err

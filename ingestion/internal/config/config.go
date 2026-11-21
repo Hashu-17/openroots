@@ -50,15 +50,15 @@ func Load() (Config, error) {
 	}
 
 	for name, val := range map[string]string{
-		"MQTT_BROKER_URL":    cfg.BrokerURL,
-		"MQTT_USERNAME":      cfg.MQTTUsername,
-		"MQTT_PASSWORD":      cfg.MQTTPassword,
-		"DATABASE_HOST":      cfg.DatabaseHost,
-		"DATABASE_NAME":      cfg.DatabaseName,
-		"DATABASE_USER":      cfg.DatabaseUser,
-		"DATABASE_PASSWORD":  cfg.DatabasePassword,
-		"REGISTRY_URL":       cfg.RegistryURL,
-		"REGISTRY_API_KEY":   cfg.RegistryAPIKey,
+		"MQTT_BROKER_URL":      cfg.BrokerURL,
+		"MQTT_USERNAME":        cfg.MQTTUsername,
+		"MQTT_PASSWORD":        cfg.MQTTPassword,
+		"DATABASE_HOST":        cfg.DatabaseHost,
+		"DATABASE_NAME":        cfg.DatabaseName,
+		"DATABASE_USER":        cfg.DatabaseUser,
+		"DATABASE_PASSWORD":    cfg.DatabasePassword,
+		"REGISTRY_URL":         cfg.RegistryURL,
+		"REGISTRY_API_KEY":     cfg.RegistryAPIKey,
 		"OPENROOTS_JWT_SECRET": cfg.JWTSecret,
 	} {
 		if val == "" {
