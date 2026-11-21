@@ -31,9 +31,10 @@ socket through the reverse proxy. See
    ```
 
    Open `http://<server-lan-ip>:5173`, sign in, choose a project, and register
-   a device with its sensor channel names. Create the device's broker account
-   (username = device UUID) with `tests/support/mqtt/provision_mqtt_device.sh`
-   or `.ps1`; see [MQTT smoke and load tests](../docs/testing/mqtt-smoke-and-load.md).
+   a device with its sensor channel names. Issue the device a credential through
+   the credentials API; the backend creates its broker account (username = device
+   UUID, password = the credential secret). See
+   [authentication](../docs/security/authentication.md#device-credentials).
    The publish topic is `openroots/v1/devices/<device UUID>/telemetry`.
 4. Copy `ingestion/examples/raspberry_pi.env.example` to a private `.env` file
    on the Pi. Fill in the server LAN IP and the three values shown by the site;

@@ -179,17 +179,23 @@ class Results:
                     self.errors.append(error)
 
 
-def read_device_ids(path: str) -> list[str]:
+def read_devices(path: str) -> dict[str, str | None]:
+    """Read ``uuid`` or ``uuid secret`` lines; a missing secret falls back to the shared password."""
+    devices: dict[str, str | None] = {}
     with open(path, encoding="utf-8") as device_file:
-        device_ids = [line.strip() for line in device_file
-                      if line.strip() and not line.lstrip().startswith("#")]
-    if not device_ids:
+        for line in device_file:
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) > 2:
+                raise ValueError("device file lines must be 'uuid' or 'uuid secret'")
+            device_id = str(uuid.UUID(parts[0]))
+            if device_id in devices:
+                raise ValueError("device file contains duplicate UUIDs")
+            devices[device_id] = parts[1] if len(parts) == 2 else None
+    if not devices:
         raise ValueError("device file contains no device UUIDs")
-    if len(set(device_ids)) != len(device_ids):
-        raise ValueError("device file contains duplicate UUIDs")
-    for device_id in device_ids:
-        uuid.UUID(device_id)
-    return device_ids
+    return devices
 
 
 def percentile(values: list[float], fraction: float) -> float:
@@ -203,7 +209,8 @@ def percentile(values: list[float], fraction: float) -> float:
 def main() -> int:
     load_local_env()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--devices", required=True, help="text file with one registered device UUID per line")
+    parser.add_argument("--devices", required=True,
+                        help="file with one 'uuid secret' (or bare 'uuid') line per registered device")
     parser.add_argument("--host", default=os.getenv("OPENROOTS_MQTT_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("OPENROOTS_MQTT_PORT", "1883")))
     parser.add_argument("--period", type=float, default=10.0, help="seconds between each device's messages")
@@ -221,11 +228,13 @@ def main() -> int:
 
     if args.period <= 0 or args.duration <= 0 or args.connect_timeout <= 0 or args.resource_sample_interval <= 0:
         parser.error("--period, --duration, --connect-timeout, and --resource-sample-interval must be greater than zero")
-    device_ids = read_device_ids(args.devices)
+    devices = read_devices(args.devices)
+    device_ids = list(devices)
     channels = args.channels or ["temperature"]
-    password = os.getenv("OPENROOTS_MQTT_DEVICE_PASSWORD")
-    if not password:
-        parser.error("set OPENROOTS_MQTT_DEVICE_PASSWORD to the password provisioned for each test device")
+    shared_password = os.getenv("OPENROOTS_MQTT_DEVICE_PASSWORD")
+    if any(secret is None for secret in devices.values()) and not shared_password:
+        parser.error("the device file has devices without a secret; run provision_mqtt_fleet.py "
+                     "or set OPENROOTS_MQTT_DEVICE_PASSWORD")
 
     results = Results()
     clients: list[tuple[str, mqtt.Client]] = []
@@ -245,7 +254,7 @@ def main() -> int:
                 protocol=mqtt.MQTTv311,
                 clean_session=True,
             )
-            client.username_pw_set(device_id, password)
+            client.username_pw_set(device_id, devices[device_id] or shared_password)
 
             def on_connect(client, userdata, flags, reason_code, properties,
                            received=connack_received, result=connection_result):

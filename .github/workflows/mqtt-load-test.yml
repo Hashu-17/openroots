@@ -18,7 +18,7 @@ on:
       mqtt_host:
         description: Broker address reachable from this Windows runner
         required: true
-        default: 192.168.29.147
+        default: 127.0.0.1
         type: string
       mqtt_port:
         description: Published MQTT port
@@ -49,10 +49,16 @@ jobs:
     env:
       OPENROOTS_API_URL: http://127.0.0.1:8080
       OPENROOTS_PROJECT_ID: ${{ inputs.project_id }}
-      OPENROOTS_MQTT_DEVICE_PASSWORD: ${{ secrets.MQTT_LOAD_DEVICE_PASSWORD }}
+      # Fleet setup signs in as this user (project OWNER or ADMIN) and issues each device
+      # a temporary credential; the cleanup step revokes them. No device password is stored.
+      MQTT_SMOKE_USER_EMAIL: ${{ secrets.MQTT_SMOKE_USER_EMAIL }}
+      MQTT_SMOKE_USER_PASSWORD: ${{ secrets.MQTT_SMOKE_USER_PASSWORD }}
       MQTT_SMOKE_DEVICE_ID: ${{ secrets.MQTT_SMOKE_DEVICE_ID }}
-      OPENROOTS_MQTT_HOST: ${{ inputs.mqtt_host || '192.168.29.147' }}
+      OPENROOTS_MQTT_HOST: ${{ inputs.mqtt_host || '127.0.0.1' }}
       OPENROOTS_MQTT_PORT: ${{ inputs.mqtt_port || 1883 }}
+      # Set repo variable SMOKE_PYTHON (Settings > Variables) to a python.exe
+      # the runner service account can read; otherwise python on PATH is used.
+      SMOKE_PYTHON: ${{ vars.SMOKE_PYTHON }}
 
     steps:
       - name: Check out repository
@@ -77,29 +83,41 @@ jobs:
             exit /b 1
           )
 
-      - name: Check load-test password secret
+      - name: Check test user secrets
         shell: cmd
         run: |
-          if not defined OPENROOTS_MQTT_DEVICE_PASSWORD (
-            echo Add the MQTT_LOAD_DEVICE_PASSWORD repository secret in GitHub Settings.
+          if not defined MQTT_SMOKE_USER_EMAIL (
+            echo Add the MQTT_SMOKE_USER_EMAIL and MQTT_SMOKE_USER_PASSWORD repository secrets in GitHub Settings.
+            exit /b 1
+          )
+          if not defined MQTT_SMOKE_USER_PASSWORD (
+            echo Add the MQTT_SMOKE_USER_PASSWORD repository secret in GitHub Settings.
             exit /b 1
           )
 
       - name: Create Python environment and install MQTT client
         shell: cmd
         run: |
-          if not exist "%USERPROFILE%\anaconda3\python.exe" (
-            echo Python not found at %USERPROFILE%\anaconda3\python.exe
+          if "%SMOKE_PYTHON%"=="" (
+            for /f "delims=" %%i in ('where python 2^>nul') do if not defined SMOKE_PYTHON set "SMOKE_PYTHON=%%i"
+          )
+          if "%SMOKE_PYTHON%"=="" (
+            echo Python not found. Set the SMOKE_PYTHON repo variable or put python on the runner PATH.
             exit /b 1
           )
-          "%USERPROFILE%\anaconda3\python.exe" -m venv .venv-mqtt-load
+          if not exist "%SMOKE_PYTHON%" (
+            echo Python not found at %SMOKE_PYTHON%
+            exit /b 1
+          )
+          "%SMOKE_PYTHON%" -m venv .venv-mqtt-load
           .venv-mqtt-load\Scripts\python.exe -m pip install -r tests/support/mqtt/requirements-mqtt.txt
 
-      - name: Create or reuse test devices and MQTT accounts
+      - name: Create or reuse test devices and issue temporary credentials
         shell: cmd
         run: >-
           .venv-mqtt-load\Scripts\python.exe tests/support/mqtt/provision_mqtt_fleet.py
           --count "${{ inputs.device_count || 100 }}"
+          --run-seconds "${{ inputs.duration_seconds || 300 }}"
 
       - name: Run synchronized MQTT load
         shell: cmd
@@ -110,6 +128,16 @@ jobs:
           --duration "${{ inputs.duration_seconds || 300 }}"
           --resource-sample-interval 5
           --resource-output load-test-results/resource-samples.csv
+
+      - name: Revoke temporary credentials and delete the device file
+        if: always()
+        shell: cmd
+        run: |
+          if not exist .venv-mqtt-load\Scripts\python.exe (
+            echo No Python environment; nothing was provisioned.
+            exit /b 0
+          )
+          .venv-mqtt-load\Scripts\python.exe tests/support/mqtt/provision_mqtt_fleet.py --revoke
 
       - name: Upload load-test resource samples
         if: always()
