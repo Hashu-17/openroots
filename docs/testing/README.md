@@ -15,7 +15,7 @@ and where they run**, not by test type.
 | Static checks | Lint (oxlint), type-check (`tsc`), OpenAPI codegen compile, production build | — | `npm run lint`, `npm run typecheck`, `npm run build` | every PR and push, `ci.yml` |
 | Container images | All three Dockerfiles still build | `Dockerfile`, `ingestion/Dockerfile`, `frontend/Dockerfile` | `docker build .` / `docker build ingestion` / `docker build frontend` | every PR and push, `ci.yml` → `docker` |
 | End-to-end (MQTT) | One device publishes over MQTT; the reading comes back from the API | `tests/e2e/mqtt/` | see [MQTT smoke and load tests](mqtt-smoke-and-load.md) | manual: **Actions → MQTT smoke test** |
-| Load (MQTT) | A fleet of virtual devices publishing in sync; latency and container CPU/RAM | `tests/load/mqtt/` | see [MQTT smoke and load tests](mqtt-smoke-and-load.md) | manual: **Actions → MQTT load test** |
+| Load (MQTT) | A fleet of virtual devices; every reading verified in PostgreSQL, publish-to-database latency, container CPU/RAM | `tests/load/mqtt/` | see [MQTT smoke and load tests](mqtt-smoke-and-load.md) | manual: **Actions → MQTT load test** |
 
 Shared helpers for the MQTT tests (device provisioning, Python requirements,
 the local `.env`) are in `tests/support/mqtt/`.
