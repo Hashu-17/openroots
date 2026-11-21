@@ -4,6 +4,7 @@ import { ArrowLeft, Check, ChevronDown, FolderKanban, Radio, Settings2, Users } 
 import DevicesView from '../features/devices/DevicesView'
 import TelemetryPanel from '../TelemetryPanel'
 import type { Device, Project, TelemetryRecord } from '../types/api'
+import type { LiveStatus } from '../api/live'
 
 /* We've reached the ProjectWorkspace view. This view displays the selected project's details and allows the user to interact with its devices and telemetry data.
   The view is divided into tabs: Overview, Devices, Members, and Settings. 
@@ -24,6 +25,7 @@ type ProjectWorkspaceProps = {
   devicesNotice: string
   telemetryDevice: Device | null
   telemetry: TelemetryRecord[]
+  liveStatus: LiveStatus
   telemetryLoading: boolean
   telemetryError: string
   onBack: () => void
@@ -81,7 +83,7 @@ export default function ProjectWorkspace(props: ProjectWorkspaceProps) {
     {tab === 'settings' && <Unavailable title="Project settings are not enabled yet" description="Project creation and configuration will arrive with the next management slice." icon={<Settings2 className="size-6" />} />}
     {tab === 'devices' && <>
       <DevicesView projectId={projectId} devices={devices} loading={devicesLoading} error={devicesError} notice={devicesNotice} onRegistered={props.onReloadDevices} onShowTelemetry={props.onShowTelemetry} onDelete={props.onDeleteDevice} />
-      {telemetryDevice && <TelemetryPanel deviceName={telemetryDevice.name} records={telemetry} loading={telemetryLoading} error={telemetryError} onClose={props.onCloseTelemetry} />}
+      {telemetryDevice && <TelemetryPanel deviceName={telemetryDevice.name} records={telemetry} loading={telemetryLoading} error={telemetryError} liveStatus={props.liveStatus} onClose={props.onCloseTelemetry} />}
     </>}
   </>
 }

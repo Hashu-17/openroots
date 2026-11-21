@@ -8,7 +8,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api': 'http://localhost:8080',
+      // ws: true also proxies the live telemetry WebSocket.
+      '/api': { target: 'http://localhost:8080', ws: true },
     },
   },
   // Unit tests live in tests/unit, mirroring src/ (see docs/testing/README.md).
