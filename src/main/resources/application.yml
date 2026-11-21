@@ -37,6 +37,9 @@ openroots:
       # Leave empty to skip. Remove the password from the environment after first login.
       email: ${OPENROOTS_BOOTSTRAP_ADMIN_EMAIL:}
       password: ${OPENROOTS_BOOTSTRAP_ADMIN_PASSWORD:}
+  live:
+    # Browser origins allowed to open the live telemetry WebSocket.
+    allowed-origins: ${OPENROOTS_LIVE_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   mqtt:
     url: ${OPENROOTS_MQTT_URL:tcp://localhost:1883}
     username: ${OPENROOTS_MQTT_USERNAME:}

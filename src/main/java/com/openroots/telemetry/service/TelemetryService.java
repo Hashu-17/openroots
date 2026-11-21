@@ -2,17 +2,21 @@ package com.openroots.telemetry.service;
 
 import java.time.Instant;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import jakarta.transaction.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import com.openroots.common.exception.NotFoundException;
 import com.openroots.device.service.DeviceService;
 import com.openroots.project.service.ProjectAuthorizationService;
 import com.openroots.telemetry.dto.TelemetryIngestRequest;
+import com.openroots.telemetry.live.TelemetryCommitted;
+import com.openroots.telemetry.live.TelemetryCommitted.StoredReading;
 import com.openroots.telemetry.model.TelemetryRecord;
 import com.openroots.telemetry.repository.TelemetryRepository;
 import com.openroots.telemetry.repository.TelemetryRepository.TelemetryPoint;
@@ -25,13 +29,17 @@ public class TelemetryService {
 
     private final ProjectAuthorizationService authorizationService;
 
+    private final ApplicationEventPublisher eventPublisher;
+
     public TelemetryService(
             DeviceService deviceService,
             TelemetryRepository telemetryRepository,
-            ProjectAuthorizationService authorizationService) {
+            ProjectAuthorizationService authorizationService,
+            ApplicationEventPublisher eventPublisher) {
         this.deviceService = deviceService;
         this.telemetryRepository = telemetryRepository;
         this.authorizationService = authorizationService;
+        this.eventPublisher = eventPublisher;
     }
 
     /** Human-user ingest: the caller must be able to use devices in the device's project. */
@@ -68,15 +76,19 @@ public class TelemetryService {
                 capturedAt,
                 Map.copyOf(request.payload()));
 
+        List<StoredReading> stored = new ArrayList<>();
         for (Map.Entry<String, Object> entry : request.payload().entrySet()) {
             if (!(entry.getValue() instanceof Number number)) {
                 throw new IllegalArgumentException("Telemetry value must be numeric: " + entry.getKey());
             }
-            if (!telemetryRepository.save(request.deviceId(), entry.getKey(), number.doubleValue(), capturedAt)) {
-                throw new NotFoundException("Sensor not found for device: " + entry.getKey());
-            }
+            UUID sensorId = telemetryRepository
+                    .save(request.deviceId(), entry.getKey(), number.doubleValue(), capturedAt)
+                    .orElseThrow(() -> new NotFoundException("Sensor not found for device: " + entry.getKey()));
+            stored.add(new StoredReading(sensorId, entry.getKey(), number.doubleValue()));
         }
         deviceService.markOnline(request.deviceId());
+        // Delivered to live subscribers only after this transaction commits.
+        eventPublisher.publishEvent(new TelemetryCommitted(request.deviceId(), capturedAt, stored));
 
         return record;
     }
