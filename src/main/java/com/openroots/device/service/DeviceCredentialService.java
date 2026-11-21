@@ -26,15 +26,18 @@ public class DeviceCredentialService {
     private final DeviceService deviceService;
     private final DeviceCredentialRepository credentialRepository;
     private final PasswordEncoder passwordEncoder;
+    private final MosquittoDeviceProvisioner brokerProvisioner;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public DeviceCredentialService(
             DeviceService deviceService,
             DeviceCredentialRepository credentialRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            MosquittoDeviceProvisioner brokerProvisioner) {
         this.deviceService = deviceService;
         this.credentialRepository = credentialRepository;
         this.passwordEncoder = passwordEncoder;
+        this.brokerProvisioner = brokerProvisioner;
     }
 
     @Transactional
@@ -71,10 +74,16 @@ public class DeviceCredentialService {
         return issue(device, current.getName(), current.getExpiresAt());
     }
 
+    /**
+     * Revokes the credential and disables the device's broker login. The broker holds only the
+     * most recently issued password, so the device cannot connect again until a new credential
+     * is issued. Other credentials that are still active are not restored on the broker.
+     */
     @Transactional
     public void revoke(String email, UUID projectId, UUID deviceId, UUID credentialId) {
         deviceService.findByIdForManage(email, projectId, deviceId);
         activeCredential(deviceId, credentialId).revoke();
+        brokerProvisioner.disable(deviceId);
     }
 
     private DeviceCredentialEntity activeCredential(UUID deviceId, UUID credentialId) {
@@ -87,6 +96,7 @@ public class DeviceCredentialService {
         String secret = generateSecret();
         DeviceCredentialEntity credential = credentialRepository.save(
                 new DeviceCredentialEntity(device, name, passwordEncoder.encode(secret), expiresAt));
+        brokerProvisioner.setPassword(device.getId(), secret);
         return new DeviceCredentialResponse(credential.getId(), name, secret, expiresAt);
     }
 

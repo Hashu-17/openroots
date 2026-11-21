@@ -37,6 +37,14 @@ openroots:
       # Leave empty to skip. Remove the password from the environment after first login.
       email: ${OPENROOTS_BOOTSTRAP_ADMIN_EMAIL:}
       password: ${OPENROOTS_BOOTSTRAP_ADMIN_PASSWORD:}
+  mqtt:
+    # Keeps each device's Mosquitto login in step with its credentials. Enabled in Compose.
+    provisioning-enabled: ${OPENROOTS_MQTT_PROVISIONING_ENABLED:false}
+    broker-host: ${OPENROOTS_MQTT_BROKER_HOST:localhost}
+    broker-port: ${OPENROOTS_MQTT_BROKER_PORT:1883}
+    admin-username: ${OPENROOTS_MQTT_ADMIN_USERNAME:}
+    admin-password: ${OPENROOTS_MQTT_ADMIN_PASSWORD:}
+    response-timeout-seconds: 5
   ingestion:
     # Shared key the Go ingestion service sends to read the device registry.
     # Empty disables the registry endpoint (every request gets 401).

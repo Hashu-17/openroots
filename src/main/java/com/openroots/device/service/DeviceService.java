@@ -23,14 +23,17 @@ public class DeviceService {
     private final DeviceRepository deviceRepository;
     private final ProjectRepository projectRepository;
     private final ProjectAuthorizationService authorizationService;
+    private final MosquittoDeviceProvisioner brokerProvisioner;
 
     public DeviceService(
             DeviceRepository deviceRepository,
             ProjectRepository projectRepository,
-            ProjectAuthorizationService authorizationService) {
+            ProjectAuthorizationService authorizationService,
+            MosquittoDeviceProvisioner brokerProvisioner) {
         this.deviceRepository = deviceRepository;
         this.projectRepository = projectRepository;
         this.authorizationService = authorizationService;
+        this.brokerProvisioner = brokerProvisioner;
     }
 
     // --- Authorized entry points used by the REST layer (caller identified by email) ---
@@ -63,6 +66,9 @@ public class DeviceService {
     @Transactional
     public void delete(String email, UUID projectId, UUID deviceId) {
         authorizationService.requireManage(email, projectId);
+        findById(projectId, deviceId);
+        // Remove the broker login first; if that fails, the device stays and can be retried.
+        brokerProvisioner.delete(deviceId);
         delete(projectId, deviceId);
     }
 

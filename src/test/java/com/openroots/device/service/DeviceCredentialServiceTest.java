@@ -3,6 +3,7 @@ package com.openroots.device.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.openroots.device.dto.DeviceCredentialResponse;
@@ -37,6 +38,9 @@ class DeviceCredentialServiceTest {
     @Mock
     private DeviceCredentialRepository credentialRepository;
 
+    @Mock
+    private MosquittoDeviceProvisioner brokerProvisioner;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(4);
     private final UUID projectId = UUID.randomUUID();
     private final UUID deviceId = UUID.randomUUID();
@@ -46,7 +50,8 @@ class DeviceCredentialServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DeviceCredentialService(deviceService, credentialRepository, passwordEncoder);
+        ReflectionTestUtils.setField(device, "id", deviceId);
+        service = new DeviceCredentialService(deviceService, credentialRepository, passwordEncoder, brokerProvisioner);
         org.mockito.Mockito.lenient().when(deviceService.findByIdForManage(EMAIL, projectId, deviceId)).thenReturn(device);
         org.mockito.Mockito.lenient().when(credentialRepository.save(any(DeviceCredentialEntity.class)))
                 .thenAnswer(call -> {
@@ -155,5 +160,41 @@ class DeviceCredentialServiceTest {
         assertThat(DeviceCredentialSummary.class.getRecordComponents())
                 .extracting(java.lang.reflect.RecordComponent::getName)
                 .doesNotContain("secret", "secretHash");
+    }
+
+    @Test
+    void issuingACredentialSetsTheBrokerPasswordToTheSecret() {
+        DeviceCredentialResponse response = service.create(EMAIL, projectId, deviceId, "gateway", null);
+
+        verify(brokerProvisioner).setPassword(deviceId, response.secret());
+    }
+
+    @Test
+    void rotatingSetsTheBrokerPasswordToTheNewSecret() {
+        DeviceCredentialEntity current = stored("gateway", null);
+        when(credentialRepository.findByIdAndDevice_Id(current.getId(), deviceId)).thenReturn(Optional.of(current));
+
+        DeviceCredentialResponse rotated = service.rotate(EMAIL, projectId, deviceId, current.getId());
+
+        verify(brokerProvisioner).setPassword(deviceId, rotated.secret());
+    }
+
+    @Test
+    void revokingDisablesTheBrokerLogin() {
+        DeviceCredentialEntity current = stored("gateway", null);
+        when(credentialRepository.findByIdAndDevice_Id(current.getId(), deviceId)).thenReturn(Optional.of(current));
+
+        service.revoke(EMAIL, projectId, deviceId, current.getId());
+
+        verify(brokerProvisioner).disable(deviceId);
+    }
+
+    @Test
+    void aBrokerFailureIsNotReportedAsSuccess() {
+        org.mockito.Mockito.doThrow(new MqttProvisioningException("broker down"))
+                .when(brokerProvisioner).setPassword(any(), any());
+
+        assertThatThrownBy(() -> service.create(EMAIL, projectId, deviceId, "gateway", null))
+                .isInstanceOf(MqttProvisioningException.class);
     }
 }
