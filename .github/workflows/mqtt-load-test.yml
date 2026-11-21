@@ -71,10 +71,11 @@ jobs:
     env:
       OPENROOTS_API_URL: http://127.0.0.1:8080
       OPENROOTS_PROJECT_ID: ${{ inputs.project_id }}
-      OPENROOTS_MQTT_DEVICE_PASSWORD: ${{ secrets.MQTT_LOAD_DEVICE_PASSWORD }}
       OPENROOTS_LOAD_DB_DSN: ${{ secrets.MQTT_LOAD_DB_DSN }}
-      OPENROOTS_API_EMAIL: ${{ secrets.MQTT_LOAD_API_EMAIL }}
-      OPENROOTS_API_PASSWORD: ${{ secrets.MQTT_LOAD_API_PASSWORD }}
+      # Fleet setup signs in as this user (project OWNER or ADMIN) and issues each device
+      # a temporary credential; the cleanup step revokes them. No device password is stored.
+      OPENROOTS_API_EMAIL: ${{ secrets.MQTT_SMOKE_USER_EMAIL }}
+      OPENROOTS_API_PASSWORD: ${{ secrets.MQTT_SMOKE_USER_PASSWORD }}
       MQTT_SMOKE_DEVICE_ID: ${{ secrets.MQTT_SMOKE_DEVICE_ID }}
       OPENROOTS_MQTT_HOST: ${{ inputs.mqtt_host || '127.0.0.1' }}
       OPENROOTS_MQTT_PORT: ${{ inputs.mqtt_port || 1883 }}
@@ -118,10 +119,9 @@ jobs:
         shell: cmd
         run: |
           set "MISSING="
-          if not defined OPENROOTS_MQTT_DEVICE_PASSWORD set "MISSING=%MISSING% MQTT_LOAD_DEVICE_PASSWORD"
           if not defined OPENROOTS_LOAD_DB_DSN set "MISSING=%MISSING% MQTT_LOAD_DB_DSN"
-          if not defined OPENROOTS_API_EMAIL set "MISSING=%MISSING% MQTT_LOAD_API_EMAIL"
-          if not defined OPENROOTS_API_PASSWORD set "MISSING=%MISSING% MQTT_LOAD_API_PASSWORD"
+          if not defined OPENROOTS_API_EMAIL set "MISSING=%MISSING% MQTT_SMOKE_USER_EMAIL"
+          if not defined OPENROOTS_API_PASSWORD set "MISSING=%MISSING% MQTT_SMOKE_USER_PASSWORD"
           if defined MISSING (
             echo Add these repository secrets in GitHub Settings:%MISSING%
             exit /b 1
@@ -148,11 +148,20 @@ jobs:
           "%SMOKE_PYTHON%" -m venv .venv-mqtt-load
           .venv-mqtt-load\Scripts\python.exe -m pip install -r tests/support/mqtt/requirements-mqtt.txt
 
-      - name: Create or reuse test devices and MQTT accounts
-        shell: cmd
-        run: >-
-          .venv-mqtt-load\Scripts\python.exe tests/support/mqtt/provision_mqtt_fleet.py
-          --count "${{ inputs.device_count || 100 }}"
+      - name: Create or reuse test devices and issue temporary credentials
+        shell: powershell
+        env:
+          COUNT: ${{ inputs.device_count || 100 }}
+          REPEATS: ${{ inputs.repeats || 3 }}
+          DURATION: ${{ inputs.duration_seconds || 300 }}
+          WARMUP: ${{ inputs.warmup_seconds || 30 }}
+        run: |
+          # Credentials must outlive every repeat: warm-up, measured time, and about
+          # two minutes per run to connect, wait for PUBACKs and drain the database.
+          $runSeconds = [int]$env:REPEATS * ([int]$env:WARMUP + [int]$env:DURATION + 120)
+          & .venv-mqtt-load\Scripts\python.exe tests/support/mqtt/provision_mqtt_fleet.py `
+            --count $env:COUNT --run-seconds $runSeconds
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run MQTT load and verify persistence
         shell: powershell
@@ -182,6 +191,16 @@ jobs:
             Write-Host "$failed of $env:REPEATS runs failed their thresholds; see summary.md in each run folder."
             exit 1
           }
+
+      - name: Revoke temporary credentials and delete the device file
+        if: always()
+        shell: cmd
+        run: |
+          if not exist .venv-mqtt-load\Scripts\python.exe (
+            echo No Python environment; nothing was provisioned.
+            exit /b 0
+          )
+          .venv-mqtt-load\Scripts\python.exe tests/support/mqtt/provision_mqtt_fleet.py --revoke
 
       - name: Upload load-test results
         if: always()
