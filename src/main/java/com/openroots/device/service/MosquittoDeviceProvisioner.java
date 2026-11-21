@@ -137,7 +137,10 @@ public class MosquittoDeviceProvisioner {
         try {
             client = new MqttClient("tcp://" + brokerHost + ":" + brokerPort,
                     "openroots-provisioner-" + UUID.randomUUID(), new MemoryPersistence());
-            ArrayBlockingQueue<byte[]> responses = new ArrayBlockingQueue<>(1);
+            // Mosquitto sends every control response to every admin client subscribed to the
+            // response topic, so keep only the response that carries our correlation ID.
+            String ours = correlation.get(0);
+            ArrayBlockingQueue<JsonNode> responses = new ArrayBlockingQueue<>(1);
             client.setCallback(new MqttCallback() {
                 @Override
                 public void connectionLost(Throwable cause) {
@@ -146,8 +149,16 @@ public class MosquittoDeviceProvisioner {
 
                 @Override
                 public void messageArrived(String topic, MqttMessage message) {
-                    if (RESPONSE_TOPIC.equals(topic)) {
-                        responses.offer(message.getPayload());
+                    if (!RESPONSE_TOPIC.equals(topic)) {
+                        return;
+                    }
+                    try {
+                        JsonNode parsed = objectMapper.readTree(message.getPayload());
+                        if (ours.equals(parsed.path("responses").path(0).path("correlationData").asText())) {
+                            responses.offer(parsed);
+                        }
+                    } catch (java.io.IOException ignored) {
+                        // Not a response we can read, so not ours.
                     }
                 }
 
@@ -169,11 +180,11 @@ public class MosquittoDeviceProvisioner {
             message.setQos(1);
             client.publish(CONTROL_TOPIC, message);
 
-            byte[] body = responses.poll(responseTimeoutSeconds, TimeUnit.SECONDS);
-            if (body == null) {
+            JsonNode response = responses.poll(responseTimeoutSeconds, TimeUnit.SECONDS);
+            if (response == null) {
                 throw new MqttProvisioningException("Mosquitto did not confirm the device login change");
             }
-            return matchResponses(objectMapper.readTree(body), correlation);
+            return matchResponses(response, correlation);
         } catch (MqttProvisioningException exception) {
             throw exception;
         } catch (InterruptedException exception) {

@@ -180,13 +180,27 @@ class DeviceCredentialServiceTest {
     }
 
     @Test
-    void revokingDisablesTheBrokerLogin() {
-        DeviceCredentialEntity current = stored("gateway", null);
-        when(credentialRepository.findByIdAndDevice_Id(current.getId(), deviceId)).thenReturn(Optional.of(current));
+    void revokingTheNewestCredentialDisablesTheBrokerLogin() {
+        DeviceCredentialEntity older = stored("old", null);
+        DeviceCredentialEntity newest = stored("gateway", null);
+        when(credentialRepository.findByIdAndDevice_Id(newest.getId(), deviceId)).thenReturn(Optional.of(newest));
+        when(credentialRepository.findAllByDevice_IdOrderByCreatedAtDesc(deviceId)).thenReturn(List.of(newest, older));
 
-        service.revoke(EMAIL, projectId, deviceId, current.getId());
+        service.revoke(EMAIL, projectId, deviceId, newest.getId());
 
         verify(brokerProvisioner).disable(deviceId);
+    }
+
+    @Test
+    void revokingAnOlderCredentialKeepsTheBrokerLoginOfTheNewestOne() {
+        DeviceCredentialEntity older = stored("old", null);
+        DeviceCredentialEntity newest = stored("gateway", null);
+        when(credentialRepository.findByIdAndDevice_Id(older.getId(), deviceId)).thenReturn(Optional.of(older));
+        when(credentialRepository.findAllByDevice_IdOrderByCreatedAtDesc(deviceId)).thenReturn(List.of(newest, older));
+
+        service.revoke(EMAIL, projectId, deviceId, older.getId());
+
+        org.mockito.Mockito.verify(brokerProvisioner, org.mockito.Mockito.never()).disable(any());
     }
 
     @Test
