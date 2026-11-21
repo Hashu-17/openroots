@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Publish one MQTT reading and wait until the backend exposes it via its API."""
+"""Publish one MQTT reading and wait until the backend exposes it via its API.
+
+Each run signs in as the test user, issues a one-hour credential for the smoke device
+(the backend syncs it to the broker), publishes with it, and revokes it at the end.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +13,7 @@ import sys
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -17,6 +21,8 @@ import paho.mqtt.client as mqtt
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "support" / "mqtt"))
 from openroots_api import OpenRootsApi, load_local_env  # noqa: E402
+
+CREDENTIAL_LIFETIME = timedelta(hours=1)
 
 
 def required_env(name: str) -> str:
@@ -37,24 +43,8 @@ def telemetry_visible(api: OpenRootsApi, device_id: str, captured_at: datetime, 
     return False
 
 
-def main() -> int:
-    load_local_env()
-    try:
-        device_id = str(uuid.UUID(required_env("MQTT_SMOKE_DEVICE_ID")))
-        password = required_env("MQTT_SMOKE_DEVICE_PASSWORD")
-    except ValueError as error:
-        print(error, file=sys.stderr)
-        return 2
-
-    broker_host = os.getenv("OPENROOTS_MQTT_HOST", "127.0.0.1")
-    broker_port = int(os.getenv("OPENROOTS_MQTT_PORT", "1883"))
-    api_url = os.getenv("OPENROOTS_API_URL", "http://127.0.0.1:8080")
-    channel = os.getenv("MQTT_SMOKE_CHANNEL", "temperature")
-    timeout_seconds = float(os.getenv("MQTT_SMOKE_TIMEOUT", "30"))
-    value = 23.75
-    now = datetime.now(timezone.utc)
-    captured_at = now.replace(microsecond=(now.microsecond // 1000) * 1000)
-    captured_at_text = captured_at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+def publish_reading(broker_host: str, broker_port: int, device_id: str, password: str,
+                    channel: str, value: float, captured_at_text: str) -> None:
     connected = threading.Event()
     connection_failure: list[str] = []
 
@@ -94,31 +84,77 @@ def main() -> int:
         if not info.is_published():
             raise TimeoutError("timed out waiting for MQTT PUBACK")
         print(f"Broker acknowledged the QoS 1 publish in {(time.monotonic() - sent_at) * 1000:.1f} ms")
-    except Exception as error:
-        print(f"MQTT smoke test failed: {error}", file=sys.stderr)
-        return 1
     finally:
         if client.is_connected():
             client.disconnect()
         client.loop_stop()
 
-    api = OpenRootsApi(api_url)
+
+def wait_for_telemetry(api: OpenRootsApi, device_id: str, captured_at: datetime, channel: str,
+                       value: float, timeout_seconds: float) -> bool:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         try:
             if telemetry_visible(api, device_id, captured_at, channel, value):
-                print(f"Backend persisted telemetry for device {device_id} ({channel}={value})")
-                return 0
+                return True
         except (RuntimeError, TimeoutError, KeyError, ValueError, json.JSONDecodeError) as error:
             print(f"Waiting for telemetry in API: {error}")
         time.sleep(1)
+    return False
 
-    print(
-        f"MQTT publish reached the broker, but telemetry was not visible from {api_url} "
-        f"within {timeout_seconds:g}s. Check backend ingestion, the registered channel, and database.",
-        file=sys.stderr,
-    )
-    return 1
+
+def main() -> int:
+    load_local_env()
+    try:
+        device_id = str(uuid.UUID(required_env("MQTT_SMOKE_DEVICE_ID")))
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return 2
+
+    broker_host = os.getenv("OPENROOTS_MQTT_HOST", "127.0.0.1")
+    broker_port = int(os.getenv("OPENROOTS_MQTT_PORT", "1883"))
+    api_url = os.getenv("OPENROOTS_API_URL", "http://127.0.0.1:8080")
+    channel = os.getenv("MQTT_SMOKE_CHANNEL", "temperature")
+    timeout_seconds = float(os.getenv("MQTT_SMOKE_TIMEOUT", "30"))
+    value = 23.75
+    now = datetime.now(timezone.utc)
+    captured_at = now.replace(microsecond=(now.microsecond // 1000) * 1000)
+    captured_at_text = captured_at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+    api = OpenRootsApi(api_url)
+    try:
+        project_id = os.getenv("OPENROOTS_PROJECT_ID") or api.project_for_device(device_id)
+        credential_id, secret = api.issue_credential(
+            project_id, device_id, f"smoke-{captured_at_text}", CREDENTIAL_LIFETIME
+        )
+    except RuntimeError as error:
+        print(f"MQTT smoke test setup failed: {error}", file=sys.stderr)
+        return 1
+    print(f"Issued a temporary credential for device {device_id} in project {project_id}")
+
+    try:
+        try:
+            publish_reading(broker_host, broker_port, device_id, secret, channel, value, captured_at_text)
+        except Exception as error:
+            print(f"MQTT smoke test failed: {error}", file=sys.stderr)
+            return 1
+
+        if wait_for_telemetry(api, device_id, captured_at, channel, value, timeout_seconds):
+            print(f"Backend persisted telemetry for device {device_id} ({channel}={value})")
+            return 0
+        print(
+            f"MQTT publish reached the broker, but telemetry was not visible from {api_url} "
+            f"within {timeout_seconds:g}s. Check backend ingestion, the registered channel, and database.",
+            file=sys.stderr,
+        )
+        return 1
+    finally:
+        try:
+            api.revoke_credential(project_id, device_id, credential_id)
+            print("Revoked the temporary credential")
+        except RuntimeError as error:
+            # It still expires on its own after CREDENTIAL_LIFETIME.
+            print(f"Could not revoke the temporary credential: {error}", file=sys.stderr)
 
 
 if __name__ == "__main__":
