@@ -3,6 +3,7 @@ package com.openroots.telemetry.repository;
 import java.time.Instant;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -16,16 +17,19 @@ public class TelemetryRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public boolean save(UUID deviceId, String channelName, double value, Instant capturedAt) {
-        int rows = jdbcTemplate.update("""
+    /** Upserts one reading; returns the sensor ID, or empty when the device has no such channel. */
+    public Optional<UUID> save(UUID deviceId, String channelName, double value, Instant capturedAt) {
+        List<UUID> sensorIds = jdbcTemplate.query("""
                 INSERT INTO telemetry (sensor_id, value, recorded_at)
                 SELECT id, ?, ?
                 FROM sensor
                 WHERE device_id = ? AND channel_name = ?
                 ON CONFLICT (sensor_id, recorded_at)
                 DO UPDATE SET value = EXCLUDED.value
-                """, value, Timestamp.from(capturedAt), deviceId, channelName);
-        return rows > 0;
+                RETURNING sensor_id
+                """, (resultSet, rowNumber) -> resultSet.getObject("sensor_id", UUID.class),
+                value, Timestamp.from(capturedAt), deviceId, channelName);
+        return sensorIds.stream().findFirst();
     }
 
     public List<TelemetryPoint> findAllForUser(String email) {
