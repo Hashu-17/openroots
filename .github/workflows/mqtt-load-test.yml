@@ -158,6 +158,10 @@ jobs:
           # Results are labelled with the branch under test (branch names may contain '/').
           $label = $env:LABEL_SOURCE -replace '[^A-Za-z0-9._-]', '-'
           $containers = 'iot-backend,iot-database,openroots-mosquitto'
+          # The Go stack runs a separate ingestion container; sample it when present.
+          if (docker ps --filter 'name=^openroots-ingestion$' --filter status=running --format '{{.Names}}') {
+            $containers += ',openroots-ingestion'
+          }
           $failed = 0
           for ($i = 1; $i -le [int]$env:REPEATS; $i++) {
             $runId = "${{ github.run_id }}-$i"
