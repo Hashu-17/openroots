@@ -281,14 +281,13 @@ push does not write test data automatically.
 test → Run workflow**); it does not run on pushes, because it needs the local
 stack and writes thousands of telemetry rows. It uses the same Windows
 self-hosted runner and checks that the local Mosquitto container and backend
-are already running (and, for `implementation: go`, the `openroots-ingestion`
-container).
+are already running. If an `openroots-ingestion` container (the Go stack) is
+running, it is added to the resource samples.
 
 Run-form inputs:
 
-- `implementation`: `spring` or `go`. Labels the results and, for `go`, adds
-  `openroots-ingestion` to the resource samples. Start the stack from the
-  matching branch before running.
+- There is no implementation input: run the workflow on the branch whose stack
+  you started. Results are labelled with the branch name.
 - Fleet size, broker host/port, period, measured duration, warm-up, schedule
   (`synchronized` or `staggered`), and `repeats` (default 3 back-to-back
   runs).
@@ -311,7 +310,7 @@ on the loopback address unless `MQTT_BIND_ADDRESS` is set.
 
 The workflow fails if any run breaches its thresholds. Each run's
 `summary.md` appears in the job summary, and the whole `load-test-results/`
-folder is uploaded as the `mqtt-load-test-<implementation>-<run id>` artifact:
+folder is uploaded as the `mqtt-load-test-<run id>` artifact:
 **Actions → MQTT load test → completed run → Artifacts**.
 
 The workflow installs its Python dependencies (`paho-mqtt`, `psycopg`) in a
