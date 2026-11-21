@@ -9,21 +9,24 @@ publishes one QoS 1 message, waits for broker acknowledgement, then polls the
 backend API until the saved reading appears. `.github/workflows/mqtt-smoke.yml`
 runs this check manually using a GitHub self-hosted runner on Windows.
 
-`mqtt_load_test.py` keeps one MQTT connection open per device and publishes a
-telemetry message from every device at the same time at startup, then repeats
-at the configured interval. This models a synchronized fleet and measures the
-publisher-side MQTT acknowledgement latency.
+`mqtt_load_test.py` keeps one MQTT connection open per device, publishes on a
+fixed schedule, and then proves the readings reached PostgreSQL. It records
+every reading it sent, polls the `telemetry` table until each one appears, and
+reports missing readings and publish-to-database latency next to the broker
+acknowledgement (PUBACK) latency. It talks only to the broker and the
+database, so the same script tests either ingestion implementation: Spring on
+`spring-mqtt-ingestion` or the Go service on `go-mqtt-ingestion`.
 
 ## How the tests get device credentials
 
-Neither test stores a device password. Each run signs in as a test user who is
-`OWNER` or `ADMIN` of the test project (`MQTT_SMOKE_USER_EMAIL` and
-`MQTT_SMOKE_USER_PASSWORD`) and issues itself short-lived device credentials
+Neither test stores a device password. Each run signs in as a test account that
+is `OWNER` or `ADMIN` of the test project (`OPENROOTS_API_EMAIL` and
+`OPENROOTS_API_PASSWORD`) and issues itself short-lived device credentials
 through the credentials API. The backend syncs each credential to the broker
 (see [authentication](../security/authentication.md)), so the broker login is
 always the one the backend manages. The credentials are revoked at the end of
 the run and expire on their own if a run crashes: one hour for the smoke test,
-the planned duration plus 30 minutes for the load test.
+the planned run time plus 30 minutes for the load test.
 
 Issuing a credential replaces the device's broker password, so do not run two
 copies of the same test at once. Each workflow has a `concurrency` group for
@@ -37,13 +40,19 @@ does not need a schema change or a migration.
 
 1. Start the local stack with `docker compose up -d --build` and make sure the
    broker, backend, and database are healthy.
-2. Copy `tests/support/mqtt/.env.example` to `tests/support/mqtt/.env` and set
-   `MQTT_SMOKE_DEVICE_ID` and the test user's email and password.
-3. Install the MQTT Python dependency, then create or reuse a 100-device fleet:
+2. Copy `tests/support/mqtt/.env.example` to `tests/support/mqtt/.env`. Set
+   `MQTT_SMOKE_DEVICE_ID`, `OPENROOTS_API_EMAIL` and `OPENROOTS_API_PASSWORD`
+   (a test account that is `OWNER` or `ADMIN` of the test project), and
+   `OPENROOTS_LOAD_DB_DSN` to the database, for example
+   `postgresql://iot_backend:PASSWORD@127.0.0.1:5432/iot_backend`. Keep the
+   file out of source control.
+3. Install the Python dependencies, then create or reuse a 100-device fleet.
+   `--run-seconds` is the total time the load test will run; the credentials
+   expire 30 minutes after it:
 
    ```powershell
    python -m pip install -r tests/support/mqtt/requirements-mqtt.txt
-   python tests/support/mqtt/provision_mqtt_fleet.py --count 100 --run-seconds 300
+   python tests/support/mqtt/provision_mqtt_fleet.py --count 100 --run-seconds 1200
    ```
 
    The project is found from `MQTT_SMOKE_DEVICE_ID`; pass `--project-id` to use
@@ -66,65 +75,104 @@ does not need a schema change or a migration.
 From the repository root:
 
 ```powershell
-python tests/load/mqtt/mqtt_load_test.py --devices tests/support/mqtt/load-devices.txt --period 10 --duration 300
+python tests/load/mqtt/mqtt_load_test.py --devices tests/support/mqtt/load-devices.txt --label spring --period 10 --warmup 30 --duration 300
 ```
 
-The load-test script reads each device's secret from the device file and the
-broker settings from `tests/support/mqtt/.env` for local runs. Environment
-variables override that file. When you are done, revoke the credentials and
+On the Go branch, pass `--label go` and add the Go container to the resource
+samples:
+
+```powershell
+python tests/load/mqtt/mqtt_load_test.py --devices tests/support/mqtt/load-devices.txt --label go --period 10 --warmup 30 --duration 300 --containers iot-backend,iot-database,openroots-mosquitto,openroots-ingestion
+```
+
+The script reads each device's secret from the device file, and the broker
+address and database DSN from `tests/support/mqtt/.env` for local runs;
+environment variables override that file. Repeat `--channel` to publish several
+registered channels per message. When you are done, revoke the credentials and
 delete the device file, which holds the secrets:
 
 ```powershell
 python tests/support/mqtt/provision_mqtt_fleet.py --revoke
 ```
 
-To publish multiple channels, repeat `--channel` with names registered on
-every device:
+### What a run does
 
-```powershell
-python tests/load/mqtt/mqtt_load_test.py --devices tests/support/mqtt/load-devices.txt --period 10 --duration 300 --channel temperature --channel humidity
-```
+1. Connects every device and fails fast if the broker rejects one.
+2. Publishes on a fixed schedule. `--schedule synchronized` (default) sends
+   every device at the same instant each period; `--schedule staggered`
+   spreads devices evenly across the period. Publishing never waits for a
+   PUBACK, so a slow server cannot stretch the interval or the run.
+3. Gives every reading a unique `capturedAt` (its scheduled time, in
+   milliseconds). That value becomes `telemetry.recorded_at`, so each reading
+   can be matched to exactly one row by device, channel and timestamp.
+4. Polls the database every `--db-poll-interval` seconds (default 0.5) and
+   stamps each reading when it first becomes visible. Latency is measured on
+   the load generator's clock, with a resolution of one poll interval.
+5. After publishing stops, waits for outstanding PUBACKs (`--ack-timeout`) and
+   keeps polling up to `--drain-timeout` seconds (default 30) for readings that
+   are still missing.
+6. Traffic during `--warmup` is sent and checked but excluded from the stats
+   and thresholds.
 
-Defaults are 10 seconds, 120 seconds, QoS 1, and `temperature`. Configure
-`--host`/`--port` for a different broker. The test reports successful PUBACKs,
-failed publishes, rate, and PUBACK latency percentiles. It also samples Docker
-CPU and RAM for `iot-backend`, `iot-database`, and `openroots-mosquitto` every
-five seconds while publishing. Readings appear in the console and in
-`load-test-results/resource-samples.csv`; `--resource-sample-interval` and
-`--resource-output` can change the interval and path. The CSV includes a
-pre-test baseline, UTC timestamps, CPU percentage, memory used and limit, and
-container PID count. The final output summarizes average and peak CPU/RAM from
-the in-load samples. PUBACK means the broker accepted the message; it does not
-prove the backend committed it to PostgreSQL. After the run, verify the
-expected telemetry rows in the development database. For a rough expectation,
-a 5-minute run at 10-second intervals
-produces about 30 messages per device after the synchronized first publish
-(about 3,000 messages for 100 devices), with minor variation at the end of the
-run.
+Messages follow the [MQTT telemetry contract](../contracts/mqtt-telemetry.md):
+the body is `{"capturedAt": ..., "payload": {...}}` with no `deviceId`, since
+the topic identifies the device. The Go service rejects unexpected fields.
 
-## Load-test practice
+### Pass/fail thresholds
 
-Start with a short smoke run, then run a baseline with a gradual ramp-up,
-steady-state traffic, and a longer soak. Test synchronized bursts separately
-from staggered device schedules: they stress different parts of the system.
-Keep payload size and channel count realistic, repeat runs, and record the
-server and database resource usage alongside throughput, p95/p99 latency, and
-errors. This script's five-second `docker stats` samples and MQTT PUBACK
-latencies are a useful first load-test record. A more complete performance
-setup usually adds a time-series monitor such as Prometheus/Grafana, host-level
-CPU/RAM, application and database metrics, and explicit pass/fail targets.
-This run's sampling is container-level; Docker Desktop on Windows reports
-container memory differently from Linux, so compare runs on the same runner
-platform. Increase fleet size or message frequency in controlled steps until
-latency, error rate, or resource use exceeds the limits you set. Run against a
-disposable development/staging stack, since this script writes real telemetry
-and creates concurrent broker connections.
+A run exits non-zero when any limit is breached:
 
-The load-test workflow uploads `load-test-results/resource-samples.csv` as
-the `mqtt-load-test-results` artifact. Download it from the completed GitHub
-workflow run. The live workflow log also shows each sample. A five
-minute run with a five second interval produces roughly 60 in-load samples per
-container, plus the baseline.
+| Flag | Default | Meaning |
+|---|---|---|
+| `--max-missing` | `0` | Readings sent but never stored |
+| `--max-publish-failures` | `0` | Publishes that failed or were never acknowledged |
+| `--p95-ms` | `2000` | Publish-to-database p95 limit (`0` disables) |
+| `--p99-ms` | `5000` | Publish-to-database p99 limit (`0` disables) |
+
+Failed database polls, failed resource samples, or no in-load resource samples
+also fail the run. `--skip-db-verify` reports broker acknowledgements only;
+that proves the broker received the messages, not that they were stored.
+
+### Results
+
+Each run writes `load-test-results/<label>-<run-id>/` containing:
+
+- `summary.md`: the readable result table, also printed to the console and the
+  GitHub job summary.
+- `summary.json`: settings, git commit, attempted/acknowledged/failed
+  publishes, actual duration and rate, expected/stored/missing readings,
+  PUBACK and publish-to-database p50/p95/p99/max, per-container CPU/RAM, and
+  the pass/fail reasons.
+- `readings.csv`: one row per reading sent, with its send time, PUBACK
+  latency, database visibility time, and status (`stored`, `missing` or
+  `publish_failed`).
+- `resource-samples.csv`: Docker CPU/RAM/PID samples for `--containers`
+  (default `iot-backend,iot-database,openroots-mosquitto`) every
+  `--resource-sample-interval` seconds, plus a pre-test baseline.
+
+The run ID defaults to the UTC start time. `--output-dir` changes the parent
+folder.
+
+## Comparing Spring and Go ingestion
+
+Use the same broker, database, fleet, message pattern, and container resource
+limits for both, and run them one at a time:
+
+1. Check out `spring-mqtt-ingestion`, run `docker compose up -d --build`,
+   provision the fleet, and run the load test three times with
+   `--label spring --warmup 30 --duration 300`.
+2. Stop the stack, check out `go-mqtt-ingestion`, start it the same way, and
+   run three times with `--label go` and the extra `openroots-ingestion`
+   container.
+3. Confirm every run stored all expected readings and met the latency
+   thresholds. Then compare the `publish_to_db_ms` percentiles and the
+   ingestion container's CPU/RAM in each `summary.json`.
+
+Docker sampling is container-level. Docker Desktop on Windows reports container
+memory differently from Linux, so compare runs on the same runner platform.
+The database polling adds a small, identical query load to both runs. Run
+against a disposable development/staging stack, since this script writes real
+telemetry and creates concurrent broker connections.
 
 ## GitHub Actions smoke test setup
 
@@ -183,15 +231,16 @@ and stack are on the same PC, so its MQTT port and API are reachable at
    `temperature` (unit `C`) for this smoke test. Submit, then copy the device
    UUID shown on the device card. The workflow sends a numeric value for the
    exact channel name `temperature`.
-7. Choose the test user. It must be `OWNER` or `ADMIN` of that project, because
-   only those roles can manage device credentials. Add another user with
-   `POST /api/v1/projects/{projectId}/members` and
+7. Choose the test account. It must be `OWNER` or `ADMIN` of that project,
+   because only those roles can manage device credentials. Add another user
+   with `POST /api/v1/projects/{projectId}/members` and
    `{"email": "...", "role": "ADMIN"}`.
-8. Add three GitHub repository **secrets** under **Settings → Secrets and
+8. Add the GitHub repository **secrets** under **Settings → Secrets and
    variables → Actions → New repository secret**:
 
    - `MQTT_SMOKE_DEVICE_ID` — the device UUID you copied from the app.
-   - `MQTT_SMOKE_USER_EMAIL` and `MQTT_SMOKE_USER_PASSWORD` — the test user.
+   - `MQTT_SMOKE_USER_EMAIL` and `MQTT_SMOKE_USER_PASSWORD` — the test
+     account. Both workflows sign in with it.
 
    Do not put these values in the workflow file or commit them.
 9. In the GitHub repo, open **Actions → MQTT smoke test → Run workflow**. A
@@ -205,22 +254,22 @@ and stack are on the same PC, so its MQTT port and API are reachable at
   self-hosted runner.
 - `tests/e2e/mqtt/mqtt_smoke_test.py` — publishes one reading and polls the backend
   telemetry API until that reading is stored.
-- `tests/support/mqtt/openroots_api.py` — signs in and issues or revokes
-  temporary device credentials; shared by the smoke test and fleet setup.
 - `tests/support/mqtt/provision_mqtt_fleet.py` — idempotently creates/reuses a
   fleet via the existing API, issues each device a temporary credential, and
   writes the device file for the load test. `--revoke` cleans up.
 - `tests/support/mqtt/requirements-mqtt.txt` — Python MQTT client dependency installed
   by the workflow.
-- `tests/load/mqtt/mqtt_load_test.py` — the separate continuous multi-device test for
-  later; the smoke workflow does not run this script.
+- `tests/load/mqtt/mqtt_load_test.py` — the multi-device load test with
+  persistence verification; the smoke workflow does not run this script.
+- `tests/support/mqtt/openroots_api.py` — shared `.env` loading, API sign-in,
+  and issuing or revoking temporary device credentials.
 - `docs/testing/mqtt-smoke-and-load.md` — setup and run guide.
 
 For a local command-line smoke run, copy `tests/support/mqtt/.env.example` to
-`tests/support/mqtt/.env`, fill in the device UUID and the test user, then run
-`python tests/e2e/mqtt/mqtt_smoke_test.py` from the repository root. The real
-`tests/support/mqtt/.env` is ignored by Git. GitHub Actions uses the repository
-secrets instead of this local file.
+`tests/support/mqtt/.env`, fill in the device UUID and the test account, then
+run `python tests/e2e/mqtt/mqtt_smoke_test.py` from the repository root. The
+real `tests/support/mqtt/.env` is ignored by Git. GitHub Actions uses the
+repository secrets instead of this local file.
 
 This is a self-hosted runner, so only run workflow code you trust on this PC.
 The smoke test writes one telemetry reading each time. It is manual-only so a
@@ -232,18 +281,37 @@ push does not write test data automatically.
 test → Run workflow**); it does not run on pushes, because it needs the local
 stack and writes thousands of telemetry rows. It uses the same Windows
 self-hosted runner and checks that the local Mosquitto container and backend
-are already running. By default it creates/reuses 100 devices and runs them at
-a 10-second period for 5 minutes; the run form lets you adjust the fleet size,
-broker host/port, period, and duration. The project is found from
-the existing `MQTT_SMOKE_DEVICE_ID` secret unless you enter a project UUID.
-It signs in with the same `MQTT_SMOKE_USER_EMAIL` and `MQTT_SMOKE_USER_PASSWORD`
-secrets, issues each fleet device a temporary credential, and a final step that
-always runs revokes them and deletes the device file. No device password
-secret is needed.
+are already running. If an `openroots-ingestion` container (the Go stack) is
+running, it is added to the resource samples.
 
-The workflow installs its Python dependency in a fresh virtual environment
-because GitHub Actions checks out the code into its workspace for each run.
-That replaces the manual `pip install` command; it is not something you need
-to run separately. The broker host and port default to `127.0.0.1:1883`,
-because Compose publishes Mosquitto on the loopback address only; adjust the
-manual-run inputs when the Docker published endpoint changes.
+Run-form inputs:
+
+- There is no implementation input: run the workflow on the branch whose stack
+  you started. Results are labelled with the branch name.
+- Fleet size, broker host/port, period, measured duration, warm-up, schedule
+  (`synchronized` or `staggered`), and `repeats` (default 3 back-to-back
+  runs).
+
+Repository secrets:
+
+- `MQTT_SMOKE_USER_EMAIL` / `MQTT_SMOKE_USER_PASSWORD` — the test account
+  (`OWNER` or `ADMIN` of the project). Fleet setup signs in with it, issues
+  each device a temporary credential that outlasts all `repeats`, and a final
+  step that always runs revokes them and deletes the device file. No device
+  password secret is needed.
+- `MQTT_LOAD_DB_DSN` — PostgreSQL DSN reachable from the runner, for example
+  `postgresql://iot_backend:PASSWORD@127.0.0.1:5432/iot_backend`. Used to
+  verify that every reading was stored.
+- `MQTT_SMOKE_DEVICE_ID` — used to find the project when no project UUID is
+  entered.
+
+The broker host defaults to `127.0.0.1`, because Compose publishes Mosquitto
+on the loopback address unless `MQTT_BIND_ADDRESS` is set.
+
+The workflow fails if any run breaches its thresholds. Each run's
+`summary.md` appears in the job summary, and the whole `load-test-results/`
+folder is uploaded as the `mqtt-load-test-<run id>` artifact:
+**Actions → MQTT load test → completed run → Artifacts**.
+
+The workflow installs its Python dependencies (`paho-mqtt`, `psycopg`) in a
+fresh virtual environment for each run.
