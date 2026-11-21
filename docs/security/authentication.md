@@ -103,6 +103,10 @@ A credential belongs to one device. The secret is random, returned **only** in t
 - Revoking a credential disables the broker login. Other credentials that are still active are not restored, so the device cannot connect again until a new credential is issued.
 - Deleting a device deletes its broker login.
 
+Verified against Mosquitto 2.1 with the production ACL defaults: after each step, only the password that the backend last set is accepted; a revoked or deleted device is refused, and a publish to another device's topic is denied.
+
+**Caveat for device firmware.** Mosquitto denies a publish outside the device's topic with reason code 0x87 (Not authorized) on MQTT 5. On MQTT 3.1.1 the PUBACK has no reason code, so the broker acknowledges the publish and silently drops it. Devices should publish over MQTT 5, or check the topic they use, because a 3.1.1 acknowledgement does not prove the message was accepted.
+
 Set `OPENROOTS_MQTT_PROVISIONING_ENABLED=true` (Compose does this) to turn sync on. When it is off, credentials exist only in the database.
 
 ## Current implementation status
