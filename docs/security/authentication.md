@@ -106,6 +106,7 @@ Implemented:
 - Platform roles (`USER`, `ADMIN`), a bootstrap admin from the environment, and admin endpoints for listing users and changing platform roles.
 - Project creation by platform admins (creator becomes `OWNER`), membership management and project-level authorization for projects, devices and telemetry (REST).
 - Device credential creation, listing, rotation and revocation with hashed secrets.
+- Live telemetry WebSocket: the client sends its access token as the first message, the read rule is checked, and the socket closes when the token expires. See the [live telemetry contract](../contracts/live-telemetry.md).
 
 Not implemented yet:
 
@@ -113,4 +114,3 @@ Not implemented yet:
 - Refresh tokens, logout/token revocation, password reset, and email verification.
 - Invitations for emails that have not registered yet, and screens for member and user management.
 - Rate limiting on `/api/v1/auth/*`.
-- Authentication for the WebSocket push (`WebSocketConfig` is currently empty).

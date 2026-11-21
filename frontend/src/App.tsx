@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react' // I used 4 hooks here (react hooks are functions that let use React features in functional components)
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { api, session, SESSION_EXPIRED_EVENT } from './api/client'
+import { mergeLiveReading, openLiveTelemetry, type LiveStatus } from './api/live'
 import AuthScreen from './views/AuthScreen'
 import ProjectsIndex from './views/ProjectsIndex'
 import ProjectWorkspace from './views/ProjectWorkspace'
@@ -35,6 +36,7 @@ export default function App() {
   const [telemetry, setTelemetry] = useState<TelemetryRecord[]>([])
   const [telemetryLoading, setTelemetryLoading] = useState(false)
   const [telemetryError, setTelemetryError] = useState('')
+  const [liveStatus, setLiveStatus] = useState<LiveStatus>('offline')
   const loadedDevicesProjectId = useRef('')
   const selectedProject = projects.find((project) => project.id === selectedProjectId)
 
@@ -134,6 +136,18 @@ export default function App() {
     setDevicesNotice('')
   }
 
+  // While a device's telemetry is open, stream newly stored readings into the list.
+  const telemetryDeviceId = telemetryDevice?.id
+  useEffect(() => {
+    if (!telemetryDeviceId) return
+    return openLiveTelemetry(
+      telemetryDeviceId,
+      session.getToken,
+      (event) => setTelemetry((current) => mergeLiveReading(current, event)),
+      setLiveStatus,
+    )
+  }, [telemetryDeviceId, accessToken])
+
   async function showTelemetry(device: Device) {
     setTelemetryDevice(device)
     setTelemetry([])
@@ -204,6 +218,7 @@ export default function App() {
           telemetry={telemetry}
           telemetryLoading={telemetryLoading}
           telemetryError={telemetryError}
+          liveStatus={liveStatus}
           onBack={() => setView('projects')}
           onProjectChange={openProject}
           onReloadDevices={reloadDevices}

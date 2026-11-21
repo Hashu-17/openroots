@@ -1,13 +1,17 @@
 import { LoaderCircle, X } from 'lucide-react'
 import type { TelemetryRecord } from './types/api'
+import type { LiveStatus } from './api/live'
 
 type TelemetryPanelProps = {
   deviceName: string
   records: TelemetryRecord[]
   loading: boolean
   error: string
+  liveStatus: LiveStatus
   onClose: () => void
 }
+
+const LIVE_LABELS: Record<LiveStatus, string> = { connecting: 'Connecting', live: 'Live', offline: 'Offline' }
 
 // Format the received time so people can compare readings at a glance.
 function formatTimestamp(value: string) {
@@ -21,10 +25,10 @@ function formatTimestamp(value: string) {
 }
 
 // Display readings for one device, including loading, error, and no-data states.
-export default function TelemetryPanel({ deviceName, records, loading, error, onClose }: TelemetryPanelProps) {
+export default function TelemetryPanel({ deviceName, records, loading, error, liveStatus, onClose }: TelemetryPanelProps) {
   return <section className="mt-5 border border-[#36514c] bg-[#172825]">
     <div className="flex items-start justify-between gap-4 border-b border-[#36514c] px-5 py-5 sm:px-7">
-      <div><p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#41c7a1]">Telemetry stream</p><h2 className="font-display text-xl font-bold text-[#f1f3ed]">{deviceName}</h2></div>
+      <div><p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#41c7a1]">Telemetry stream</p><h2 className="font-display text-xl font-bold text-[#f1f3ed]">{deviceName}</h2><p className="mt-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.1em] text-[#7fb8aa]" aria-live="polite"><span className={`size-2 rounded-full ${liveStatus === 'live' ? 'bg-[#41c7a1]' : liveStatus === 'connecting' ? 'bg-[#e6b85a]' : 'bg-[#6f817f]'}`} />{LIVE_LABELS[liveStatus]}</p></div>
       <button className="grid size-8 place-items-center border border-[#36514c] bg-[#1c302d] text-[#91ddc4] transition hover:border-[#41c7a1]" onClick={onClose} type="button" aria-label="Close telemetry"><X className="size-4" /></button>
     </div>
     {error && <div className="m-5 border-l-4 border-[#dc755d] bg-[#321f1d] px-4 py-3 text-sm text-[#f1b0a0]">{error}</div>}

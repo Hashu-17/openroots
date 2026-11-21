@@ -31,6 +31,7 @@ Then open `target/reports/apidocs/index.html` in a browser.
 
 - [Authentication and Authorization](security/authentication.md)
 - [Telemetry MQTT contract](contracts/mqtt-telemetry.md)
+- [Live telemetry WebSocket contract](contracts/live-telemetry.md)
 - [OpenAPI description](openapi.yaml) 
 
 The `v1` in `/api/v1` is the HTTP API's major compatibility version. It is independent of the product release number and the OpenAPI document's `info.version` field.
