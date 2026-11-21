@@ -97,6 +97,14 @@ Generate a key with `openssl rand -base64 48`.
 
 A credential belongs to one device. The secret is random, returned **only** in the create or rotate response, and stored as a BCrypt hash. Listing credentials returns metadata only (`id`, `name`, `createdAt`, `expiresAt`, `revokedAt`, `active`). Rotation revokes the old credential and issues a replacement with the same name and expiry; the device identity does not change. Revoked or expired credentials are inactive (BR-013).
 
+**Broker login.** Each device has one Mosquitto login: the username is the device UUID and the password is the most recently issued credential secret. The login has the `device-publisher` role, so it can publish only to that device's topic. The backend applies changes through Mosquitto's dynamic-security API and fails the request if the broker does not confirm the change:
+
+- Creating or rotating a credential sets the broker password to the new secret.
+- Revoking a credential disables the broker login. Other credentials that are still active are not restored, so the device cannot connect again until a new credential is issued.
+- Deleting a device deletes its broker login.
+
+Set `OPENROOTS_MQTT_PROVISIONING_ENABLED=true` (Compose does this) to turn sync on. When it is off, credentials exist only in the database.
+
 ## Current implementation status
 
 Implemented:
@@ -110,7 +118,7 @@ Implemented:
 
 Not implemented yet:
 
-- **Devices authenticating with their credentials.** Credentials can be issued and revoked, but nothing verifies them yet: the REST telemetry endpoint requires a human JWT, and the MQTT consumer ingests without checking a device credential (broker-level MQTT authentication is configured separately in `mosquitto/`).
+- **Verifying device credentials in the backend.** The broker verifies each device's synced login and enforces topic ownership. The backend does not check the database hash of a device credential on MQTT messages.
 - Refresh tokens, logout/token revocation, password reset, and email verification.
 - Invitations for emails that have not registered yet, and screens for member and user management.
 - Rate limiting on `/api/v1/auth/*`.
