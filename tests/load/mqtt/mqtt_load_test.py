@@ -294,8 +294,8 @@ def main() -> int:
                     channel: round(20.0 + (sequence % 100) / 10.0 + index, 2)
                     for index, channel in enumerate(channels)
                 }
-                body = json.dumps({"deviceId": device_id, "capturedAt": captured_at,
-                                   "payload": payload_values})
+                # The topic identifies the device; ingestion rejects a deviceId field.
+                body = json.dumps({"capturedAt": captured_at, "payload": payload_values})
                 sent_at = time.perf_counter()
                 info = client.publish(topic, body, qos=args.qos, retain=False)
                 if info.rc != mqtt.MQTT_ERR_SUCCESS:

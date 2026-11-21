@@ -93,8 +93,9 @@ def publish_reading(
             raise ConnectionError(f"MQTT connection refused: {connection_failure[0]}")
 
         topic = f"openroots/v1/devices/{device_id}/telemetry"
+        # The topic identifies the device; ingestion rejects a deviceId field
+        # (docs/contracts/mqtt-telemetry.md).
         message = json.dumps({
-            "deviceId": device_id,
             "capturedAt": captured_at_text,
             "payload": {channel: value},
         })
