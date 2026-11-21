@@ -17,12 +17,12 @@ database commit.
   broker PUBACK time, and polls the telemetry API until the exact reading is
   visible. This checks one end-to-end message; it does not measure fleet
   capacity or report persistence latency.
-- `tests/load/mqtt/mqtt_load_test.py` connects one MQTT client per UUID, publishes
-  synchronized initial traffic, then repeats at a configured interval. It
-  reports connected devices, acknowledged and failed publishes, publish
-  rate, and mean, p95, and maximum PUBACK latency. PUBACK means the broker
-  accepted the message. The script does not currently verify every message
-  was persisted, report p99, or capture server CPU and memory.
+- `tests/load/mqtt/mqtt_load_test.py` connects one MQTT client per UUID and
+  publishes on a fixed synchronized or staggered schedule with optional
+  warm-up. It verifies every reading in PostgreSQL, reports missing readings,
+  PUBACK and publish-to-database p50/p95/p99, and container CPU/RAM, writes a
+  per-run report folder, and fails on configurable thresholds. It is
+  implementation-neutral, so it compares Spring and Go ingestion.
 - `tests/support/mqtt/provision_mqtt_fleet.py` now creates or reuses test devices through
   the registration API, provisions their Mosquitto accounts, and writes the
   device UUID manifest. It uses the existing schema, so fleet setup needs no
