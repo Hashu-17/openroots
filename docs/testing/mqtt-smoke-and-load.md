@@ -17,43 +17,52 @@ acknowledgement (PUBACK) latency. It talks only to the broker and the
 database, so the same script tests either ingestion implementation: Spring on
 `spring-mqtt-ingestion` or the Go service on `go-mqtt-ingestion`.
 
+## How the tests get device credentials
+
+Neither test stores a device password. Each run signs in as a test account that
+is `OWNER` or `ADMIN` of the test project (`OPENROOTS_API_EMAIL` and
+`OPENROOTS_API_PASSWORD`) and issues itself short-lived device credentials
+through the credentials API. The backend syncs each credential to the broker
+(see [authentication](../security/authentication.md)), so the broker login is
+always the one the backend manages. The credentials are revoked at the end of
+the run and expire on their own if a run crashes: one hour for the smoke test,
+the planned run time plus 30 minutes for the load test.
+
+Issuing a credential replaces the device's broker password, so do not run two
+copies of the same test at once. Each workflow has a `concurrency` group for
+this. Revoked credentials stay in the credential list as inactive rows.
+
 ## Prepare a local test fleet
 
 Use a disposable development/test database. Fleet setup calls the existing
-device-registration API and creates ordinary test records; it does not need a
-schema change or a migration. The same setup works in PowerShell and bash.
+device-registration and credentials APIs and creates ordinary test records; it
+does not need a schema change or a migration.
 
 1. Start the local stack with `docker compose up -d --build` and make sure the
    broker, backend, and database are healthy.
-2. Copy `tests/support/mqtt/.env.example` to `tests/support/mqtt/.env` and set
-   `OPENROOTS_MQTT_DEVICE_PASSWORD` to a test-only password. Set
-   `OPENROOTS_API_EMAIL` and `OPENROOTS_API_PASSWORD` to a test account that
-   can manage devices in the test project (the API requires sign-in), and
+2. Copy `tests/support/mqtt/.env.example` to `tests/support/mqtt/.env`. Set
+   `MQTT_SMOKE_DEVICE_ID`, `OPENROOTS_API_EMAIL` and `OPENROOTS_API_PASSWORD`
+   (a test account that is `OWNER` or `ADMIN` of the test project), and
    `OPENROOTS_LOAD_DB_DSN` to the database, for example
-   `postgresql://iot_backend:PASSWORD@127.0.0.1:5432/iot_backend`. Keep it out of
-   source control and do not reuse a broker admin or real device password.
-3. Find the UUID of an existing test project in the OpenRoots UI or from
-   `GET http://127.0.0.1:8080/api/v1/projects`. Install the MQTT Python
-   dependency, then create or reuse a 100-device fleet:
+   `postgresql://iot_backend:PASSWORD@127.0.0.1:5432/iot_backend`. Keep the
+   file out of source control.
+3. Install the Python dependencies, then create or reuse a 100-device fleet.
+   `--run-seconds` is the total time the load test will run; the credentials
+   expire 30 minutes after it:
 
    ```powershell
    python -m pip install -r tests/support/mqtt/requirements-mqtt.txt
-   python tests/support/mqtt/provision_mqtt_fleet.py --project-id PROJECT_UUID --count 100
+   python tests/support/mqtt/provision_mqtt_fleet.py --count 100 --run-seconds 1200
    ```
 
-   The script gives devices stable names (`openroots-load-test-001`, etc.),
-   registers a numeric `temperature` sensor, provisions each UUID as its MQTT
-   username with the shared test password, and writes their UUIDs to the
-   ignored `tests/support/mqtt/load-devices.txt`. Re-running it reuses devices with
-   those names and resets their broker password. Broker admin credentials are
-   read inside the Mosquitto container. Change `--name-prefix` to create a
-   separate fleet.
-
-   These broker logins are created directly with the broker's admin tool, not
-   through the credentials API. In normal use, issuing a device credential
-   through the API sets that device's broker password itself (see
-   [authentication](../security/authentication.md)); if you later issue a
-   credential for a test device, it replaces the shared test password.
+   The project is found from `MQTT_SMOKE_DEVICE_ID`; pass `--project-id` to use
+   another one. The script gives devices stable names
+   (`openroots-load-test-001`, etc.), registers a numeric `temperature` sensor,
+   and issues each device a temporary credential. It writes
+   `tests/support/mqtt/load-devices.txt` (one `uuid secret` line per device)
+   and `tests/support/mqtt/load-credentials.json` (credential ids only). Both
+   are ignored by Git. Re-running it reuses devices with those names. Change
+   `--name-prefix` to create a separate fleet.
 
    The script provisions the test fleet in the local development database
    selected by the running backend. Use a separate disposable test database
@@ -76,9 +85,15 @@ samples:
 python tests/load/mqtt/mqtt_load_test.py --devices tests/support/mqtt/load-devices.txt --label go --period 10 --warmup 30 --duration 300 --containers iot-backend,iot-database,openroots-mosquitto,openroots-ingestion
 ```
 
-The script reads the device password, broker address and database DSN from
-`tests/support/mqtt/.env` for local runs; environment variables override that
-file. Repeat `--channel` to publish several registered channels per message.
+The script reads each device's secret from the device file, and the broker
+address and database DSN from `tests/support/mqtt/.env` for local runs;
+environment variables override that file. Repeat `--channel` to publish several
+registered channels per message. When you are done, revoke the credentials and
+delete the device file, which holds the secrets:
+
+```powershell
+python tests/support/mqtt/provision_mqtt_fleet.py --revoke
+```
 
 ### What a run does
 
@@ -162,7 +177,8 @@ telemetry and creates concurrent broker connections.
 ## GitHub Actions smoke test setup
 
 The first workflow is a manually triggered end-to-end smoke test for one
-pre-registered device. It does not create or delete projects/devices. Start the
+pre-registered device. It does not create or delete projects/devices; it only
+issues and revokes a temporary credential for that device. Start the
 OpenRoots development stack on your Windows PC with `docker compose up -d
 --build`; leave it running while invoking the workflow. The self-hosted runner
 and stack are on the same PC, so its MQTT port and API are reachable at
@@ -171,17 +187,16 @@ and stack are on the same PC, so its MQTT port and API are reachable at
 ### Requirements
 
 - Windows 10/11 PC with Git installed and available on `PATH`.
-- Anaconda Python installed in the runner user's profile at
-  `%USERPROFILE%\anaconda3\python.exe`. The workflow invokes this executable
-  directly because the runner job does not resolve Conda's `PATH`.
+- A Python 3 that the runner's account can read. When the runner is a Windows
+  service it runs as `NETWORK SERVICE`, which cannot read a Python installed in
+  your user profile (such as Anaconda). Install Python for all users (for
+  example `winget install Python.Python.3.12 --scope machine`) and set the
+  repository **variable** `SMOKE_PYTHON` to its `python.exe`. Without the
+  variable the workflows use the first `python` on the runner's `PATH`.
 - Docker Desktop running Linux containers, with Docker Compose v2 available.
 - A GitHub repository where Actions are enabled, plus an internet connection
   for the runner to connect outbound to GitHub and for the workflow to install
   `paho-mqtt` from PyPI. The runner needs no inbound port forwarding.
-
-Check that the runner account can access
-`%USERPROFILE%\anaconda3\python.exe`. The current workflow expects that Anaconda
-installation path when creating its virtual environment.
 
 ### Install and register a Windows runner
 
@@ -207,47 +222,30 @@ installation path when creating its virtual environment.
    Wait until the services are running. Check the backend at
    `http://localhost:8080/actuator/health`, then open the app at
    `http://localhost:5173`.
-5. Select an existing project in the app. If the list is empty, this version
-   of the app cannot create projects in the UI (the **New project** button is
-   disabled). Create a local test project from PowerShell instead:
-
-   ```powershell
-   docker compose exec database psql -U iot_backend -d iot_backend -c "INSERT INTO project (name) VALUES ('MQTT Smoke Test') RETURNING id;"
-   ```
-
-   This command uses the sample `.env` database/user values. If yours differ,
-   replace `iot_backend` with your `POSTGRES_USER` and `POSTGRES_DB` values
-   from `.env`. Reload the app and select the new project.
+5. Create a test project as a platform admin. Only platform admins can create
+   projects, and the creator becomes its `OWNER`. Use the app, or the API:
+   `POST /api/v1/projects` with `{"name": "MQTT Smoke Test"}` and the admin's
+   bearer token.
 6. In the project, use **Devices → Register a device**. Enter a device name
    and type. The form starts with `temperature`, `rain`, and `uv` sensors; keep
    `temperature` (unit `C`) for this smoke test. Submit, then copy the device
    UUID shown on the device card. The workflow sends a numeric value for the
    exact channel name `temperature`.
-7. Copy `tests/support/mqtt/.env.example` to `tests/support/mqtt/.env`, put the registered device
-   UUID and a unique test password in it, then run the provisioning script:
-
-   ```powershell
-   Copy-Item tests/support/mqtt/.env.example tests/support/mqtt/.env
-   notepad tests/support/mqtt/.env
-   .\tests\support\mqtt\provision_mqtt_device.ps1
-   ```
-
-   The script creates the MQTT username from the device UUID and assigns the
-   `device-publisher` role. It reads the admin credentials from the broker
-   container. `tests/support/mqtt/.env` is ignored by Git; keep it local.
-8. Add the GitHub repository secrets. Go to the GitHub repo's **Settings →
-   Secrets and variables → Actions → New repository secret** and create:
+7. Choose the test account. It must be `OWNER` or `ADMIN` of that project,
+   because only those roles can manage device credentials. Add another user
+   with `POST /api/v1/projects/{projectId}/members` and
+   `{"email": "...", "role": "ADMIN"}`.
+8. Add the GitHub repository **secrets** under **Settings → Secrets and
+   variables → Actions → New repository secret**:
 
    - `MQTT_SMOKE_DEVICE_ID` — the device UUID you copied from the app.
-   - `MQTT_SMOKE_DEVICE_PASSWORD` — the password set in `tests/support/mqtt/.env` and used by the provisioning script.
-   - `MQTT_LOAD_API_EMAIL` and `MQTT_LOAD_API_PASSWORD` — a test account that
-     is a member of the test project. The smoke test signs in with it to read
-     telemetry; the load workflow uses it to register the fleet.
+   - `MQTT_SMOKE_USER_EMAIL` and `MQTT_SMOKE_USER_PASSWORD` — the test
+     account. Both workflows sign in with it.
 
-   Do not put either value in the workflow file or commit them.
+   Do not put these values in the workflow file or commit them.
 9. In the GitHub repo, open **Actions → MQTT smoke test → Run workflow**. A
-   passing run means the broker acknowledged the publish and the backend API
-   returned that exact reading from PostgreSQL.
+   passing run means the broker accepted the device login and the publish, and
+   the backend API returned that exact reading from PostgreSQL.
 
 ### Where the scripts live
 
@@ -256,24 +254,22 @@ installation path when creating its virtual environment.
   self-hosted runner.
 - `tests/e2e/mqtt/mqtt_smoke_test.py` — publishes one reading and polls the backend
   telemetry API until that reading is stored.
-- `tests/support/mqtt/provision_mqtt_device.ps1` — creates the local broker client from
-  `tests/support/mqtt/.env` and assigns its publisher role.
-- `tests/support/mqtt/provision_mqtt_fleet.py` — idempotently creates/reuses a fleet via
-  the existing API, provisions matching broker clients, and writes the UUID
-  list for the load test.
+- `tests/support/mqtt/provision_mqtt_fleet.py` — idempotently creates/reuses a
+  fleet via the existing API, issues each device a temporary credential, and
+  writes the device file for the load test. `--revoke` cleans up.
 - `tests/support/mqtt/requirements-mqtt.txt` — Python MQTT client dependency installed
   by the workflow.
 - `tests/load/mqtt/mqtt_load_test.py` — the multi-device load test with
   persistence verification; the smoke workflow does not run this script.
-- `tests/support/mqtt/openroots_api.py` — shared `.env` loading and API sign-in
-  used by the smoke, fleet and load scripts.
+- `tests/support/mqtt/openroots_api.py` — shared `.env` loading, API sign-in,
+  and issuing or revoking temporary device credentials.
 - `docs/testing/mqtt-smoke-and-load.md` — setup and run guide.
 
 For a local command-line smoke run, copy `tests/support/mqtt/.env.example` to
-`tests/support/mqtt/.env`, fill in the device UUID and MQTT password, then run
-`python tests/e2e/mqtt/mqtt_smoke_test.py` from the repository root. The real
-`tests/support/mqtt/.env` is ignored by Git. GitHub Actions uses the two repository
-secrets instead of this local file.
+`tests/support/mqtt/.env`, fill in the device UUID and the test account, then
+run `python tests/e2e/mqtt/mqtt_smoke_test.py` from the repository root. The
+real `tests/support/mqtt/.env` is ignored by Git. GitHub Actions uses the
+repository secrets instead of this local file.
 
 This is a self-hosted runner, so only run workflow code you trust on this PC.
 The smoke test writes one telemetry reading each time. It is manual-only so a
@@ -299,15 +295,19 @@ Run-form inputs:
 
 Repository secrets:
 
-- `MQTT_LOAD_DEVICE_PASSWORD` — shared password for all fleet clients. The
-  workflow provisions those broker accounts and publishes with it.
+- `MQTT_SMOKE_USER_EMAIL` / `MQTT_SMOKE_USER_PASSWORD` — the test account
+  (`OWNER` or `ADMIN` of the project). Fleet setup signs in with it, issues
+  each device a temporary credential that outlasts all `repeats`, and a final
+  step that always runs revokes them and deletes the device file. No device
+  password secret is needed.
 - `MQTT_LOAD_DB_DSN` — PostgreSQL DSN reachable from the runner, for example
   `postgresql://iot_backend:PASSWORD@127.0.0.1:5432/iot_backend`. Used to
   verify that every reading was stored.
-- `MQTT_LOAD_API_EMAIL` / `MQTT_LOAD_API_PASSWORD` — test account used to
-  register the fleet.
 - `MQTT_SMOKE_DEVICE_ID` — used to find the project when no project UUID is
   entered.
+
+The broker host defaults to `127.0.0.1`, because Compose publishes Mosquitto
+on the loopback address unless `MQTT_BIND_ADDRESS` is set.
 
 The workflow fails if any run breaches its thresholds. Each run's
 `summary.md` appears in the job summary, and the whole `load-test-results/`
