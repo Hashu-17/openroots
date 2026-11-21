@@ -11,5 +11,6 @@
 /.venv-mqtt-smoke/
 /.venv-mqtt-load/
 /tests/support/mqtt/load-devices.txt
+/tests/support/mqtt/load-credentials.json
 /load-test-results/
 __pycache__/
