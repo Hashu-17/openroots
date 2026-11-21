@@ -31,7 +31,7 @@ on:
         default: 10
         type: number
       duration_seconds:
-        description: Test duration in seconds
+        description: Measured test duration in seconds
         required: true
         default: 300
         type: number
@@ -49,6 +49,7 @@ jobs:
     env:
       OPENROOTS_API_URL: http://127.0.0.1:8080
       OPENROOTS_PROJECT_ID: ${{ inputs.project_id }}
+      OPENROOTS_LOAD_DB_DSN: ${{ secrets.MQTT_LOAD_DB_DSN }}
       # Fleet setup signs in as this user (project OWNER or ADMIN) and issues each device
       # a temporary credential; the cleanup step revokes them. No device password is stored.
       OPENROOTS_API_EMAIL: ${{ secrets.MQTT_SMOKE_USER_EMAIL }}
@@ -56,9 +57,6 @@ jobs:
       MQTT_SMOKE_DEVICE_ID: ${{ secrets.MQTT_SMOKE_DEVICE_ID }}
       OPENROOTS_MQTT_HOST: ${{ inputs.mqtt_host || '127.0.0.1' }}
       OPENROOTS_MQTT_PORT: ${{ inputs.mqtt_port || 1883 }}
-      # Set repo variable SMOKE_PYTHON (Settings > Variables) to a python.exe
-      # the runner service account can read; otherwise python on PATH is used.
-      SMOKE_PYTHON: ${{ vars.SMOKE_PYTHON }}
 
     steps:
       - name: Check out repository
@@ -83,20 +81,24 @@ jobs:
             exit /b 1
           )
 
-      - name: Check test user secrets
+      - name: Check load-test secrets
         shell: cmd
         run: |
-          if not defined OPENROOTS_API_EMAIL (
-            echo Add the MQTT_SMOKE_USER_EMAIL and MQTT_SMOKE_USER_PASSWORD repository secrets in GitHub Settings.
-            exit /b 1
-          )
-          if not defined OPENROOTS_API_PASSWORD (
-            echo Add the MQTT_SMOKE_USER_PASSWORD repository secret in GitHub Settings.
+          set "MISSING="
+          if not defined OPENROOTS_LOAD_DB_DSN set "MISSING=%MISSING% MQTT_LOAD_DB_DSN"
+          if not defined OPENROOTS_API_EMAIL set "MISSING=%MISSING% MQTT_SMOKE_USER_EMAIL"
+          if not defined OPENROOTS_API_PASSWORD set "MISSING=%MISSING% MQTT_SMOKE_USER_PASSWORD"
+          if defined MISSING (
+            echo Add these repository secrets in GitHub Settings:%MISSING%
             exit /b 1
           )
 
       - name: Create Python environment and install MQTT client
         shell: cmd
+        env:
+          # Set repo variable SMOKE_PYTHON (Settings > Variables) to a python.exe
+          # the runner service account can read; otherwise python on PATH is used.
+          SMOKE_PYTHON: ${{ vars.SMOKE_PYTHON }}
         run: |
           if "%SMOKE_PYTHON%"=="" (
             for /f "delims=" %%i in ('where python 2^>nul') do if not defined SMOKE_PYTHON set "SMOKE_PYTHON=%%i"
@@ -113,21 +115,49 @@ jobs:
           .venv-mqtt-load\Scripts\python.exe -m pip install -r tests/support/mqtt/requirements-mqtt.txt
 
       - name: Create or reuse test devices and issue temporary credentials
-        shell: cmd
-        run: >-
-          .venv-mqtt-load\Scripts\python.exe tests/support/mqtt/provision_mqtt_fleet.py
-          --count "${{ inputs.device_count || 100 }}"
-          --run-seconds "${{ inputs.duration_seconds || 300 }}"
+        shell: powershell
+        env:
+          COUNT: ${{ inputs.device_count || 100 }}
+          REPEATS: 1
+          DURATION: ${{ inputs.duration_seconds || 300 }}
+          WARMUP: 0
+        run: |
+          # Credentials must outlive every repeat: warm-up, measured time, and about
+          # two minutes per run to connect, wait for PUBACKs and drain the database.
+          $runSeconds = [int]$env:REPEATS * ([int]$env:WARMUP + [int]$env:DURATION + 120)
+          & .venv-mqtt-load\Scripts\python.exe tests/support/mqtt/provision_mqtt_fleet.py `
+            --count $env:COUNT --run-seconds $runSeconds
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Run synchronized MQTT load
-        shell: cmd
-        run: >-
-          .venv-mqtt-load\Scripts\python.exe tests/load/mqtt/mqtt_load_test.py
-          --devices tests/support/mqtt/load-devices.txt
-          --period "${{ inputs.period_seconds || 10 }}"
-          --duration "${{ inputs.duration_seconds || 300 }}"
-          --resource-sample-interval 5
-          --resource-output load-test-results/resource-samples.csv
+      - name: Run MQTT load and verify persistence
+        shell: powershell
+        env:
+          LABEL_SOURCE: ${{ github.ref_name }}
+          REPEATS: 1
+          PERIOD: ${{ inputs.period_seconds || 10 }}
+          DURATION: ${{ inputs.duration_seconds || 300 }}
+          WARMUP: 0
+          SCHEDULE: synchronized
+        run: |
+          # Results are labelled with the branch under test (branch names may contain '/').
+          $label = $env:LABEL_SOURCE -replace '[^A-Za-z0-9._-]', '-'
+          $containers = 'iot-backend,iot-database,openroots-mosquitto'
+          $failed = 0
+          for ($i = 1; $i -le [int]$env:REPEATS; $i++) {
+            $runId = "${{ github.run_id }}-$i"
+            Write-Host "=== Run $i of $env:REPEATS ($label, $runId) ==="
+            & .venv-mqtt-load\Scripts\python.exe tests/load/mqtt/mqtt_load_test.py `
+              --devices tests/support/mqtt/load-devices.txt `
+              --label $label --run-id $runId `
+              --period $env:PERIOD --duration $env:DURATION --warmup $env:WARMUP `
+              --schedule $env:SCHEDULE --containers $containers `
+              --resource-sample-interval 5
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) {
+            Write-Host "$failed of $env:REPEATS runs failed their thresholds; see summary.md in each run folder."
+            exit 1
+          }
 
       - name: Revoke temporary credentials and delete the device file
         if: always()
@@ -139,10 +169,10 @@ jobs:
           )
           .venv-mqtt-load\Scripts\python.exe tests/support/mqtt/provision_mqtt_fleet.py --revoke
 
-      - name: Upload load-test resource samples
+      - name: Upload load-test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mqtt-load-test-results
+          name: mqtt-load-test-${{ github.run_id }}
           path: load-test-results/
           if-no-files-found: warn
