@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import paho.mqtt.client as mqtt
 
@@ -43,9 +43,25 @@ def load_local_env() -> None:
             os.environ.setdefault(name, value)
 
 
-def telemetry_visible(api_url: str, device_id: str, captured_at: datetime, channel: str, value: float) -> bool:
+def login(api_url: str, email: str, password: str) -> str:
+    """Sign in as a user who can read the device's project and return the access token."""
+    request = Request(
+        f"{api_url.rstrip('/')}/api/v1/auth/login",
+        data=json.dumps({"email": email, "password": password}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urlopen(request, timeout=5) as response:
+        return json.load(response)["data"]["accessToken"]
+
+
+def telemetry_visible(
+    api_url: str, device_id: str, captured_at: datetime, channel: str, value: float, token: str | None = None
+) -> bool:
     query = urlencode({"deviceId": device_id})
-    with urlopen(f"{api_url.rstrip('/')}/api/v1/telemetry?{query}", timeout=5) as response:
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    request = Request(f"{api_url.rstrip('/')}/api/v1/telemetry?{query}", headers=headers)
+    with urlopen(request, timeout=5) as response:
         result = json.load(response)
     for record in result.get("data", []):
         received_at = datetime.fromisoformat(record["capturedAt"].replace("Z", "+00:00"))
@@ -120,10 +136,22 @@ def main() -> int:
             client.disconnect()
         client.loop_stop()
 
+    token = None
+    user_email = os.getenv("MQTT_SMOKE_USER_EMAIL")
+    user_password = os.getenv("MQTT_SMOKE_USER_PASSWORD")
+    if user_email and user_password:
+        try:
+            token = login(api_url, user_email, user_password)
+        except (URLError, KeyError, ValueError) as error:
+            print(f"API sign-in failed: {error}", file=sys.stderr)
+            return 1
+    else:
+        print("MQTT_SMOKE_USER_EMAIL/PASSWORD not set; calling the API without sign-in", file=sys.stderr)
+
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         try:
-            if telemetry_visible(api_url, device_id, captured_at, channel, value):
+            if telemetry_visible(api_url, device_id, captured_at, channel, value, token):
                 print(f"Backend persisted telemetry for device {device_id} ({channel}={value})")
                 return 0
         except (URLError, TimeoutError, KeyError, ValueError, json.JSONDecodeError) as error:
