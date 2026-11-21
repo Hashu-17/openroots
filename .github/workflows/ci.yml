@@ -12,7 +12,6 @@ on:
 permissions:
   contents: read
 
-# A new push to the same PR or branch cancels the run that is now out of date.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
