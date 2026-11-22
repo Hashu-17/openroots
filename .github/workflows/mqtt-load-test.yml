@@ -97,6 +97,26 @@ jobs:
             exit /b 1
           )
 
+      - name: Detect the running stack and check it matches the branch
+        shell: powershell
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          # The test only talks to the broker and the database, so it cannot tell which
+          # backend is behind them. The Go stack is the one running openroots-ingestion.
+          $goRunning = [bool](docker ps --filter 'name=^openroots-ingestion$' --filter status=running --format '{{.Names}}')
+          $stack = if ($goRunning) { 'go' } else { 'spring' }
+          $expected = $null
+          if ($env:BRANCH -match '(^|[-_/])go($|[-_/])') { $expected = 'go' }
+          elseif ($env:BRANCH -match '(^|[-_/])spring($|[-_/])') { $expected = 'spring' }
+          if ($expected -and $expected -ne $stack) {
+            Write-Host "Branch '$env:BRANCH' is a $expected branch, but the $stack stack is running."
+            Write-Host "Check out the branch, run 'docker compose up -d --build --remove-orphans', then run this workflow again."
+            exit 1
+          }
+          Write-Host "Testing the $stack stack."
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "STACK=$stack`n")
+
       - name: Check load-test secrets
         shell: cmd
         run: |
@@ -148,20 +168,16 @@ jobs:
       - name: Run MQTT load and verify persistence
         shell: powershell
         env:
-          LABEL_SOURCE: ${{ github.ref_name }}
           REPEATS: ${{ inputs.repeats || 3 }}
           PERIOD: ${{ inputs.period_seconds || 10 }}
           DURATION: ${{ inputs.duration_seconds || 300 }}
           WARMUP: ${{ inputs.warmup_seconds || 30 }}
           SCHEDULE: ${{ inputs.schedule || 'synchronized' }}
         run: |
-          # Results are labelled with the branch under test (branch names may contain '/').
-          $label = $env:LABEL_SOURCE -replace '[^A-Za-z0-9._-]', '-'
+          # STACK ("go" or "spring") was detected from the running containers above.
+          $label = $env:STACK
           $containers = 'iot-backend,iot-database,openroots-mosquitto'
-          # The Go stack runs a separate ingestion container; sample it when present.
-          if (docker ps --filter 'name=^openroots-ingestion$' --filter status=running --format '{{.Names}}') {
-            $containers += ',openroots-ingestion'
-          }
+          if ($label -eq 'go') { $containers += ',openroots-ingestion' }
           $failed = 0
           for ($i = 1; $i -le [int]$env:REPEATS; $i++) {
             $runId = "${{ github.run_id }}-$i"
