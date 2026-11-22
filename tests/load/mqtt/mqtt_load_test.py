@@ -112,8 +112,9 @@ def git_revision() -> dict[str, str | None]:
             return result.stdout.strip() or None
         except (OSError, subprocess.SubprocessError):
             return None
-    return {"commit": run("git", "rev-parse", "HEAD"),
-            "branch": run("git", "rev-parse", "--abbrev-ref", "HEAD")}
+    # CI provides both; git can refuse the checkout when the runner service owns another account.
+    return {"commit": os.getenv("GITHUB_SHA") or run("git", "rev-parse", "HEAD"),
+            "branch": os.getenv("GITHUB_REF_NAME") or run("git", "rev-parse", "--abbrev-ref", "HEAD")}
 
 
 # --------------------------------------------------------------------------- resources
