@@ -281,13 +281,17 @@ push does not write test data automatically.
 test → Run workflow**); it does not run on pushes, because it needs the local
 stack and writes thousands of telemetry rows. It uses the same Windows
 self-hosted runner and checks that the local Mosquitto container and backend
-are already running. If an `openroots-ingestion` container (the Go stack) is
-running, it is added to the resource samples.
+are already running. It also detects which stack is running: the Go stack is the
+one with a running `openroots-ingestion` container. The results are labelled
+`go` or `spring` from that, not from the branch. If the branch name says `go` or
+`spring` and the other stack is running, the workflow stops before sending any
+traffic.
 
 Run-form inputs:
 
-- There is no implementation input: run the workflow on the branch whose stack
-  you started. Results are labelled with the branch name.
+- There is no implementation input: start the stack from the branch you run the
+  workflow on. The stack is detected, and the result heading shows the branch
+  and commit.
 - Fleet size, broker host/port, period, measured duration, warm-up, schedule
   (`synchronized` or `staggered`), and `repeats` (default 3 back-to-back
   runs).
