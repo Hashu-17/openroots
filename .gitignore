@@ -3,7 +3,7 @@
 !.env.example
 /target/
 /prompts/
-/plans/*\
+/plans/
 !/plans/testing/
 !/plans/testing/**
 /architecture/
